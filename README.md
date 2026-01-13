@@ -7,7 +7,7 @@ The package is intentionally self‑contained (`urdf`/`xacro`, `task` and `rviz`
 ## Prerequisites
 
 1. Install ROS 2 Humble (or a newer distro with the same APIs).
-2. Clone and build [`ocs2_ros2`](https://gitlab.deltaww.com/cto_office/advtech/service_robot/robot/ocs2/ocs2_ros2) up to `ocs2_mobile_manipulator_ros` `pkg`:
+2. Clone and build [`ocs2_ros2`](https://github.com/wei-hsuan-cheng/ocs2_ros2) up to `ocs2_mobile_manipulator_ros` `pkg`:
     ```bash
     cd ~/ros2_ws
     colcon build --symlink-install --packages-up-to ocs2_mobile_manipulator_ros
