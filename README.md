@@ -1,6 +1,6 @@
 # mpc_controller
 
-Minimal ROS 2 control package that embeds the [OCS2](https://leggedrobotics.github.io/ocs2/) mobile manipulator MPC stack in a `ros2_control` workflow. 
+Minimal ROS 2 control package that embeds the [OCS2](https://leggedrobotics.github.io/ocs2/) mobile manipulator MPC stack in a `ros2_control` workflow.
 
 The package is intentionally self‑contained (`urdf`/`xacro`, `task` and `rviz` config), but it **depends on the upstream OCS2 ROS 2 repositories** for the solver libraries and marker/MPC nodes.
 
@@ -12,7 +12,7 @@ The package is intentionally self‑contained (`urdf`/`xacro`, `task` and `rviz`
     cd ~/ros2_ws
     colcon build --symlink-install --packages-up-to ocs2_mobile_manipulator_ros
     ```
-    - Make sure the `ocs2_ros2` workspace is sourced before building this package.
+    - Make sure the [`ocs2_ros2`](https://github.com/wei-hsuan-cheng/ocs2_ros2) workspace is sourced before building this package.
 
 ## Build and Run Demo
 
@@ -30,7 +30,7 @@ ros2 launch mpc_controller mobile_manipulator_mpc.launch.py use_fake_hardware:=t
 ros2 launch mpc_controller mobile_manipulator_mpc.launch.py use_fake_hardware:=true commandType:=trajectory
 ```
 
-If you built `ocs2_ros2` in another workspace, source it **before** running the commands above (so their messages and plugins are discoverable).
+If you built [`ocs2_ros2`](https://github.com/wei-hsuan-cheng/ocs2_ros2) in another workspace, source it **before** running the commands above (so their messages and plugins are discoverable).
 
 Useful arguments:
 
@@ -66,4 +66,6 @@ src/
 
 ## Contact
 
-- **Author**: Wei-Hsuan Cheng [(johnathancheng0125@gmail.com)](johnathancheng0125@gmail.com)
+- **Author**: Wei-Hsuan Cheng [(johnathancheng0125@gmail.com)](mailto:johnathancheng0125@gmail.com)
+- **Homepage**: [wei-hsuan-cheng](https://wei-hsuan-cheng.github.io)
+- **GitHub**: [wei-hsuan-cheng](https://github.com/wei-hsuan-cheng)
