@@ -30,6 +30,21 @@ ros2 launch mpc_controller mobile_manipulator_mpc.launch.py use_fake_hardware:=t
 ros2 launch mpc_controller mobile_manipulator_mpc.launch.py use_fake_hardware:=true commandType:=trajectory
 ```
 
+## Ridgeback UR5 (marker)
+
+This preset mirrors the upstream OCS2 example `manipulator_ridgeback_ur5_marker.launch.py`, but runs the MRT side inside the `ros2_control` controller and uses a small fake odom publisher by default.
+
+```bash
+ros2 launch mpc_controller ridgeback_ur5_marker.launch.py
+# optionally disable RViz or the fake odom publisher
+ros2 launch mpc_controller ridgeback_ur5_marker.launch.py rviz:=false use_fake_odom:=false
+```
+
+Key arguments:
+- `taskFile`, `urdfFile`, `libFolder`: OCS2 inputs (used by both MPC node and controller).
+- `baseCmdTopic`, `odomTopic`: topics used by the controller for base command / odometry.
+
+
 If you built [`ocs2_ros2`](https://github.com/wei-hsuan-cheng/ocs2_ros2) in another workspace, source it **before** running the commands above (so their messages and plugins are discoverable).
 
 Useful arguments:

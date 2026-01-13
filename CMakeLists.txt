@@ -85,6 +85,9 @@ add_executable(mobile_manipulator_trajectory_target src/command/MobileManipulato
 ament_target_dependencies(mobile_manipulator_trajectory_target ${OCS2_CONTROL_NODE_DEPENDENCIES})
 target_link_libraries(mobile_manipulator_trajectory_target yaml-cpp)
 
+add_executable(fake_base_odom_node src/sim/FakeBaseOdomNode.cpp)
+ament_target_dependencies(fake_base_odom_node rclcpp geometry_msgs nav_msgs)
+
 install(
   TARGETS ${PROJECT_NAME}
   EXPORT export_${PROJECT_NAME}
@@ -98,6 +101,7 @@ install(TARGETS
   mobile_manipulator_marker_target
   mobile_manipulator_twist_target
   mobile_manipulator_trajectory_target
+  fake_base_odom_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

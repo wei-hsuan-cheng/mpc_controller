@@ -1,0 +1,3 @@
+ridgeback_base_controller:
+  ros__parameters:
+    odom_frame_id: odom
