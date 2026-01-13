@@ -25,9 +25,9 @@ colcon build --symlink-install --packages-select mpc_controller && . install/set
 ```
 
 ```bash
-ros2 launch mpc_controller arm_base_mpc.launch.py use_fake_hardware:=true commandType:=marker
-ros2 launch mpc_controller arm_base_mpc.launch.py use_fake_hardware:=true commandType:=twist
-ros2 launch mpc_controller arm_base_mpc.launch.py use_fake_hardware:=true commandType:=trajectory
+ros2 launch mpc_controller mobile_manipulator_mpc.launch.py use_fake_hardware:=true commandType:=marker
+ros2 launch mpc_controller mobile_manipulator_mpc.launch.py use_fake_hardware:=true commandType:=twist
+ros2 launch mpc_controller mobile_manipulator_mpc.launch.py use_fake_hardware:=true commandType:=trajectory
 ```
 
 If you built `ocs2_ros2` in another workspace, source it **before** running the commands above (so their messages and plugins are discoverable).
