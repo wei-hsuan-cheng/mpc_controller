@@ -2,8 +2,13 @@
 <robot name="ridgeback_ur5_arm_control" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <xacro:arg name="use_mock_hardware" default="true"/>
+  <xacro:arg name="initial_pose_file" default=""/>
 
   <xacro:property name="use_mock_hardware" value="$(arg use_mock_hardware)"/>
+
+  <xacro:property name="initial_pose_file" value="$(arg initial_pose_file)"/>
+  <xacro:property name="initial_pose" value="${xacro.load_yaml(initial_pose_file)}"/>
+  <xacro:property name="arm_init" value="${initial_pose['arm_joints']}"/>
 
   <!-- Minimal kinematic chain for ros2_control (joint names match ridgeback_ur5.urdf) -->
   <link name="base_link"/>
@@ -73,27 +78,39 @@
 
     <joint name="ur_arm_shoulder_pan_joint">
       <command_interface name="position"/>
-      <state_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${arm_init['ur_arm_shoulder_pan_joint']}</param>
+      </state_interface>
     </joint>
     <joint name="ur_arm_shoulder_lift_joint">
       <command_interface name="position"/>
-      <state_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${arm_init['ur_arm_shoulder_lift_joint']}</param>
+      </state_interface>
     </joint>
     <joint name="ur_arm_elbow_joint">
       <command_interface name="position"/>
-      <state_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${arm_init['ur_arm_elbow_joint']}</param>
+      </state_interface>
     </joint>
     <joint name="ur_arm_wrist_1_joint">
       <command_interface name="position"/>
-      <state_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${arm_init['ur_arm_wrist_1_joint']}</param>
+      </state_interface>
     </joint>
     <joint name="ur_arm_wrist_2_joint">
       <command_interface name="position"/>
-      <state_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${arm_init['ur_arm_wrist_2_joint']}</param>
+      </state_interface>
     </joint>
     <joint name="ur_arm_wrist_3_joint">
       <command_interface name="position"/>
-      <state_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${arm_init['ur_arm_wrist_3_joint']}</param>
+      </state_interface>
     </joint>
   </ros2_control>
 

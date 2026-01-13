@@ -1,4 +1,6 @@
 
+import os
+import yaml
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, RegisterEventHandler
 from launch.conditions import IfCondition
@@ -9,10 +11,23 @@ from launch.substitutions import Command, FindExecutable, LaunchConfiguration, P
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterFile, ParameterValue
 from launch_ros.substitutions import FindPackageShare
+from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
     mpc_share = FindPackageShare("mpc_controller")
+    mpc_share_dir = get_package_share_directory("mpc_controller")
+    initial_pose_default = os.path.join(mpc_share_dir, "config", "ridgeback_ur5", "initial_pose.yaml")
+    try:
+        with open(initial_pose_default, "r") as f:
+            initial_pose_cfg = yaml.safe_load(f) or {}
+    except Exception:
+        initial_pose_cfg = {}
+    base_cfg = (initial_pose_cfg.get("base") or {})
+    base_x_default = str(base_cfg.get("x", 0.0))
+    base_y_default = str(base_cfg.get("y", 0.0))
+    base_yaw_default = str(base_cfg.get("yaw", 0.0))
+
 
     task_default = PathJoinSubstitution([mpc_share, "config", "ridgeback_ur5", "task.info"])
     urdf_default = PathJoinSubstitution([mpc_share, "description", "ridgeback_ur5", "urdf", "ridgeback_ur5.urdf"])
@@ -36,6 +51,10 @@ def generate_launch_description():
         DeclareLaunchArgument("odomTopic", default_value="/odom"),
         DeclareLaunchArgument("markerPublishRate", default_value="100.0"),
         DeclareLaunchArgument("enableJoystick", default_value="false"),
+        DeclareLaunchArgument("initialPoseFile", default_value=initial_pose_default),
+        DeclareLaunchArgument("baseX0", default_value=base_x_default),
+        DeclareLaunchArgument("baseY0", default_value=base_y_default),
+        DeclareLaunchArgument("baseYaw0", default_value=base_yaw_default),
         DeclareLaunchArgument("commandType", default_value="marker"),
     ]
 
@@ -47,6 +66,9 @@ def generate_launch_description():
             " ",
             "use_mock_hardware:=",
             LaunchConfiguration("use_fake_hardware"),
+            " ",
+            "initial_pose_file:=",
+            LaunchConfiguration("initialPoseFile"),
         ]
     )
     robot_description = {
@@ -123,6 +145,9 @@ def generate_launch_description():
                 "frame_id": LaunchConfiguration("globalFrame"),
                 "child_frame_id": "base_link",
                 "publish_rate": 200.0,
+                "x0": LaunchConfiguration("baseX0"),
+                "y0": LaunchConfiguration("baseY0"),
+                "yaw0": LaunchConfiguration("baseYaw0"),
             }
         ],
     )
