@@ -37,6 +37,7 @@ def generate_launch_description():
         DeclareLaunchArgument("odomTopic", default_value="/odom"),
         DeclareLaunchArgument("markerPublishRate", default_value="100.0"),
         DeclareLaunchArgument("enableJoystick", default_value="false"),
+        DeclareLaunchArgument("commandType", default_value="marker"),
     ]
 
     robot_description_content = Command(
@@ -127,16 +128,21 @@ def generate_launch_description():
         ],
     )
 
-    marker_launch = IncludeLaunchDescription(
+    # Command interface launcher (marker / twist / trajectory)
+    command_dir = PathJoinSubstitution(
+        [FindPackageShare("mpc_controller"), "launch", "command"]
+    )
+    command_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            PathJoinSubstitution([mpc_share, "launch", "command", "marker.launch.py"])
+            PathJoinSubstitution([
+                command_dir,
+                PythonExpression(["'", command_type, "'", " + '.launch.py'"]),
+            ])
         ),
         launch_arguments={
             "taskFile": LaunchConfiguration("taskFile"),
-            "urdfFile": LaunchConfiguration("urdfFile"),
             "libFolder": LaunchConfiguration("libFolder"),
-            "markerPublishRate": LaunchConfiguration("markerPublishRate"),
-            "enableJoystick": LaunchConfiguration("enableJoystick"),
+            "urdfFile": LaunchConfiguration("urdfFile"),
             "globalFrame": LaunchConfiguration("globalFrame"),
         }.items(),
     )
@@ -158,7 +164,7 @@ def generate_launch_description():
             spawn_on_control_start,
             fake_odom_node,
             mpc_node,
-            marker_launch,
+            command_launch,
             visualize_launch,
         ]
     )
