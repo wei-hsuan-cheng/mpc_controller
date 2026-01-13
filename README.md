@@ -59,7 +59,7 @@ src/
 ## MPC rollout topic
 
 ```bash
-# joint velocity command and feedback, e.g. joint_1
+# joint velocity command and feedback, e.g., joint_1
 /mobile_manipulator_mpc_policy/input_trajectory[0]/value[2]
 /joint_states/velocity[8]
 ```
