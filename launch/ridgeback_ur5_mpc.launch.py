@@ -136,7 +136,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([
                 command_dir,
-                PythonExpression(["'", command_type, "'", " + '.launch.py'"]),
+                PythonExpression(["'", LaunchConfiguration("commandType"), "'", " + '.launch.py'"]),
             ])
         ),
         launch_arguments={
