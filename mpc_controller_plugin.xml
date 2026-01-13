@@ -1,0 +1,11 @@
+<library path="mpc_controller">
+  <class
+    name="mpc_controller/OCS2Controller"
+    type="mpc_controller::OCS2Controller"
+    base_class_type="controller_interface::ControllerInterface">
+    <description>
+      OCS2-based MPC controller.
+    </description>
+  </class>
+</library>
+

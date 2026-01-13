@@ -1,0 +1,36 @@
+# ROS 2 controllers
+control:
+  future_time_offset: 0.02 # 0.02, 0.05
+  command_smoothing_alpha: 1.0 # 1.0, 0.8
+
+# Command (target) for MPC
+command:
+  marker:
+    publish_rate: 50.0
+    enable_joystick: false
+    enable_auto_position: false
+  
+  twist:
+    publish_rate: 50.0
+    horizon: 1.0
+    dt: 0.02
+    twist_in_world: false # false; true
+    velocity:
+      x: 0.0
+      y: 0.0
+      z: 0.1
+    omega:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+  
+  trajectory:
+    publish_rate: 100.0
+    horizon: 5.0
+    dt: 0.01
+    amplitude: 0.2
+    frequency: 0.2
+    axis:
+      x: 1.0
+      y: 0.0
+      z: 1.0
