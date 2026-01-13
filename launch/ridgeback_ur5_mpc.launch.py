@@ -26,7 +26,7 @@ def generate_launch_description():
 
     declared_arguments = [
         DeclareLaunchArgument("rviz", default_value="true"),
-        DeclareLaunchArgument("use_mock_hardware", default_value="true"),
+        DeclareLaunchArgument("use_fake_hardware", default_value="true"),
         DeclareLaunchArgument("use_fake_odom", default_value="true"),
         DeclareLaunchArgument("taskFile", default_value=task_default),
         DeclareLaunchArgument("urdfFile", default_value=urdf_default),
@@ -47,7 +47,7 @@ def generate_launch_description():
             arm_control_xacro,
             " ",
             "use_mock_hardware:=",
-            LaunchConfiguration("use_mock_hardware"),
+            LaunchConfiguration("use_fake_hardware"),
         ]
     )
     robot_description = {

@@ -21,13 +21,19 @@ The package is intentionally self‑contained (`urdf`/`xacro`, `task` and `rviz`
 git clone https://github.com/wei-hsuan-cheng/mpc_controller.git
 # Build and install
 cd ~/ros2_ws
-colcon build --symlink-install --packages-select mpc_controller && . install/setup.bash
+colcon build --symlink-install \
+  --packages-select mpc_controller \
+  --parallel-workers 2 --executor sequential \
+  && . install/setup.bash
 ```
 
 ```bash
 ros2 launch mpc_controller mobile_manipulator_mpc.launch.py use_fake_hardware:=true commandType:=marker
 ros2 launch mpc_controller mobile_manipulator_mpc.launch.py use_fake_hardware:=true commandType:=twist
 ros2 launch mpc_controller mobile_manipulator_mpc.launch.py use_fake_hardware:=true commandType:=trajectory
+
+# Ridgeback + UR5 mobile manipulator
+ros2 launch mpc_controller ridgeback_ur5_mpc.launch.py commandType:=marker
 ```
 
 ## Ridgeback UR5 (marker)
