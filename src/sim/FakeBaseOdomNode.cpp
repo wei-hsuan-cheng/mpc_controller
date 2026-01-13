@@ -5,6 +5,8 @@
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <tf2_ros/transform_broadcaster.h>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 
 namespace mpc_controller
 {
@@ -34,6 +36,8 @@ public:
 
     odom_pub_ = this->create_publisher<nav_msgs::msg::Odometry>(
       odom_topic_, rclcpp::SystemDefaultsQoS());
+
+    tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
     last_update_time_ = this->now();
 
@@ -78,6 +82,21 @@ private:
     y_ += v * std::sin(yaw_) * dt;
     yaw_ = normalizeYaw(yaw_ + omega * dt);
 
+    geometry_msgs::msg::TransformStamped tf;
+    tf.header.stamp = now;
+    tf.header.frame_id = frame_id_;
+    tf.child_frame_id = child_frame_id_;
+    tf.transform.translation.x = x_;
+    tf.transform.translation.y = y_;
+    tf.transform.translation.z = 0.0;
+    tf.transform.rotation.x = 0.0;
+    tf.transform.rotation.y = 0.0;
+    tf.transform.rotation.z = std::sin(yaw_ * 0.5);
+    tf.transform.rotation.w = std::cos(yaw_ * 0.5);
+    if (tf_broadcaster_) {
+      tf_broadcaster_->sendTransform(tf);
+    }
+
     nav_msgs::msg::Odometry odom;
     odom.header.stamp = now;
     odom.header.frame_id = frame_id_;
@@ -104,6 +123,7 @@ private:
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_sub_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odom_pub_;
+  std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   rclcpp::TimerBase::SharedPtr timer_;
 
   std::mutex cmd_mutex_;

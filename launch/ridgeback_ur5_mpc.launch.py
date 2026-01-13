@@ -127,6 +127,18 @@ def generate_launch_description():
         ],
     )
 
+    world_tf_node = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="world_to_global_frame",
+        output="screen",
+        condition=IfCondition(LaunchConfiguration("use_fake_odom")),
+        arguments=[
+            "0", "0", "0", "0", "0", "0",
+            "world", LaunchConfiguration("globalFrame"),
+        ],
+    )
+
     # Command interface launcher (marker / twist / trajectory)
     command_type = LaunchConfiguration("commandType")
 
@@ -187,6 +199,7 @@ def generate_launch_description():
             control_node,
             spawn_on_control_start,
             fake_odom_node,
+            world_tf_node,
             mpc_node,
             marker_launch,
             twist_launch,
