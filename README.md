@@ -18,7 +18,7 @@ The package is intentionally self‑contained (`urdf`/`xacro`, `task` and `rviz`
 
 ```bash
 # Clone this repo
-git clone 
+git clone https://github.com/wei-hsuan-cheng/mpc_controller.git
 # Build and install
 cd ~/ros2_ws
 colcon build --symlink-install --packages-select mpc_controller && . install/setup.bash
