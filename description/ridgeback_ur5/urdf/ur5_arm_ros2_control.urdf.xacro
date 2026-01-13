@@ -3,6 +3,8 @@
 
   <xacro:arg name="use_mock_hardware" default="true"/>
 
+  <xacro:property name="use_mock_hardware" value="$(arg use_mock_hardware)"/>
+
   <!-- Minimal kinematic chain for ros2_control (joint names match ridgeback_ur5.urdf) -->
   <link name="base_link"/>
   <link name="ur_arm_link_1"/>
