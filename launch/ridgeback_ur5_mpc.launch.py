@@ -64,7 +64,7 @@ def generate_launch_description():
             " ",
             arm_control_xacro,
             " ",
-            "use_mock_hardware:=",
+            "use_fake_hardware:=",
             LaunchConfiguration("use_fake_hardware"),
             " ",
             "initial_pose_file:=",
