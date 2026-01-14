@@ -7,8 +7,8 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    ocs2_share = get_package_share_directory("ocs2_ros2_control")
-    rviz_default = f"{ocs2_share}/rviz/mobile_manipulator.rviz"
+    ocs2_share = get_package_share_directory("mpc_controller")
+    rviz_default = f"{ocs2_share}/config/rviz/mobile_manipulator.rviz"
 
     return launch.LaunchDescription([
         launch.actions.DeclareLaunchArgument(
