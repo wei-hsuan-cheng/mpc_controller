@@ -49,8 +49,6 @@ def generate_launch_description():
         DeclareLaunchArgument("globalFrame", default_value="odom"),
         DeclareLaunchArgument("baseCmdTopic", default_value="/cmd_vel"),
         DeclareLaunchArgument("odomTopic", default_value="/odom"),
-        DeclareLaunchArgument("markerPublishRate", default_value="100.0"),
-        DeclareLaunchArgument("enableJoystick", default_value="false"),
         DeclareLaunchArgument("initialPoseFile", default_value=initial_pose_default),
         DeclareLaunchArgument("baseX0", default_value=base_x_default),
         DeclareLaunchArgument("baseY0", default_value=base_y_default),
@@ -167,45 +165,23 @@ def generate_launch_description():
     # Command interface launcher (marker / twist / trajectory)
     command_type = LaunchConfiguration("commandType")
 
-    marker_launch = IncludeLaunchDescription(
+    command_dir = PathJoinSubstitution(
+        [FindPackageShare("mpc_controller"), "launch", "command"]
+    )
+    command_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            PathJoinSubstitution([mpc_share, "launch", "command", "marker.launch.py"])
+            PathJoinSubstitution([
+                command_dir,
+                PythonExpression(["'", command_type, "'", " + '.launch.py'"]),
+            ])
         ),
-        condition=IfCondition(PythonExpression(["'", command_type, "' == 'marker'"])),
         launch_arguments={
             "taskFile": LaunchConfiguration("taskFile"),
             "libFolder": LaunchConfiguration("libFolder"),
             "urdfFile": LaunchConfiguration("urdfFile"),
             "globalFrame": LaunchConfiguration("globalFrame"),
-            "markerPublishRate": LaunchConfiguration("markerPublishRate"),
-            "enableJoystick": LaunchConfiguration("enableJoystick"),
         }.items(),
     )
-
-    twist_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            PathJoinSubstitution([mpc_share, "launch", "command", "twist.launch.py"])
-        ),
-        condition=IfCondition(PythonExpression(["'", command_type, "' == 'twist'"])),
-        launch_arguments={
-            "taskFile": LaunchConfiguration("taskFile"),
-            "libFolder": LaunchConfiguration("libFolder"),
-            "urdfFile": LaunchConfiguration("urdfFile"),
-        }.items(),
-    )
-
-    trajectory_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            PathJoinSubstitution([mpc_share, "launch", "command", "trajectory.launch.py"])
-        ),
-        condition=IfCondition(PythonExpression(["'", command_type, "' == 'trajectory'"])),
-        launch_arguments={
-            "taskFile": LaunchConfiguration("taskFile"),
-            "libFolder": LaunchConfiguration("libFolder"),
-            "urdfFile": LaunchConfiguration("urdfFile"),
-        }.items(),
-    )
-
 
     visualize_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -226,9 +202,7 @@ def generate_launch_description():
             fake_odom_node,
             world_tf_node,
             mpc_node,
-            marker_launch,
-            twist_launch,
-            trajectory_launch,
+            command_launch,
             visualize_launch,
         ]
     )
