@@ -19,6 +19,11 @@ The package is intentionally self‑contained (`urdf`/`xacro`, `task` and `rviz`
 ```bash
 # Clone this repo
 git clone https://github.com/wei-hsuan-cheng/mpc_controller.git
+
+# rosdep install
+rosdep update
+rosdep install --from-paths src --ignore-src -r -y
+
 # Build and install
 cd ~/ros2_ws
 colcon build --symlink-install \
