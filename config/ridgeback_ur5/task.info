@@ -84,6 +84,30 @@ mpc
   mrtDesiredFrequency             500.0   ; [Hz] // 500.0
 }
 
+mpc_new
+{
+  timeHorizon                     2.0   ; [s] // 1.0, 2.0
+  solutionTimeWindow              -1.0   ; [s] // 0.2, 0.4
+  coldStart                       false
+  
+  debugPrint                      false
+
+  mpcDesiredFrequency             125.0   ; [Hz] // 100.0, 125.0, -1.0 (negative for best effort policy rollout!)
+  mrtDesiredFrequency             250.0   ; [Hz] // 500.0
+}
+
+mpc_old
+{
+  timeHorizon                     2.0   ; [s] // 1.0, 2.0
+  solutionTimeWindow              0.2   ; [s] // 0.2, 0.4
+  coldStart                       false
+  
+  debugPrint                      false
+
+  mpcDesiredFrequency             -1.0   ; [Hz] // 100.0; -1.0 (negative for best effort policy rollout!)
+  mrtDesiredFrequency             500.0   ; [Hz] // 500.0
+}
+
 ; initial state
 initialState
 {
