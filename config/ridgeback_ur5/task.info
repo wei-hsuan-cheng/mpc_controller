@@ -296,20 +296,20 @@ jointVelocityLimits
 
       wheelBasedMobileManipulator
       {
-        (0,0)  -0.5 ; forward velocity
-        (1,0)  -1.0 ; turning velocity
+        (0,0)  -0.2 ; forward velocity
+        (1,0)  -0.7 ; turning velocity
       }
     }
 
     ; velocity limits for the arm DOFs
     arm
     {
-      (0,0)  -1.0  ; ur_arm_shoulder_pan_joint velocity
-      (1,0)  -1.0  ; ur_arm_shoulder_lift_joint velocity
-      (2,0)  -1.0  ; ur_arm_elbow_joint velocity
-      (3,0)  -1.0  ; ur_arm_wrist_1_joint velocity
-      (4,0)  -1.0  ; ur_arm_wrist_2_joint velocity
-      (5,0)  -1.0  ; ur_arm_wrist_3_joint velocity
+      (0,0)  -0.7  ; ur_arm_shoulder_pan_joint velocity
+      (1,0)  -0.7  ; ur_arm_shoulder_lift_joint velocity
+      (2,0)  -0.7  ; ur_arm_elbow_joint velocity
+      (3,0)  -0.7  ; ur_arm_wrist_1_joint velocity
+      (4,0)  -0.7  ; ur_arm_wrist_2_joint velocity
+      (5,0)  -0.7  ; ur_arm_wrist_3_joint velocity
     }
   }
 
@@ -338,20 +338,20 @@ jointVelocityLimits
 
       wheelBasedMobileManipulator
       {
-        (0,0)  0.5 ; forward velocity
-        (1,0)  1.0 ; turning velocity
+        (0,0)  0.2 ; forward velocity
+        (1,0)  0.7 ; turning velocity
       }
     }
 
     ; velocity limits for the arm DOFs
     arm
     {
-      (0,0)  1.0  ; ur_arm_shoulder_pan_joint velocity
-      (1,0)  1.0  ; ur_arm_shoulder_lift_joint velocity
-      (2,0)  1.0  ; ur_arm_elbow_joint velocity
-      (3,0)  1.0  ; ur_arm_wrist_1_joint velocity
-      (4,0)  1.0  ; ur_arm_wrist_2_joint velocity
-      (5,0)  1.0  ; ur_arm_wrist_3_joint velocity
+      (0,0)  0.7  ; ur_arm_shoulder_pan_joint velocity
+      (1,0)  0.7  ; ur_arm_shoulder_lift_joint velocity
+      (2,0)  0.7  ; ur_arm_elbow_joint velocity
+      (3,0)  0.7  ; ur_arm_wrist_1_joint velocity
+      (4,0)  0.7  ; ur_arm_wrist_2_joint velocity
+      (5,0)  0.7  ; ur_arm_wrist_3_joint velocity
     }
   }
 }
