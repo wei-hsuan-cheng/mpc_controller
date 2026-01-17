@@ -17,7 +17,7 @@ mpc_controller:
 
     # Frames / timing
     globalFrame: "$(var globalFrame)"
-    futureTimeOffset: 0.02
+    futureTimeOffset: 0.0 # 0.02, 0.0
     commandSmoothingAlpha: 1.0
 
     # Joint mapping (must match the URDF joint names)
