@@ -237,43 +237,119 @@ controller_interface::InterfaceConfiguration OCS2Controller::state_interface_con
   return config;
 }
 
+void OCS2Controller::applyCommandUsingNextState(const vector_t& command, const vector_t& x_next)
+{
+  if (!base_cmd_pub_) {
+    return;
+  }
+
+  const size_t arm_dim = arm_joint_names_.size();
+
+  // --- Base twist command (cmd_vel) ---
+  if (static_cast<size_t>(command.size()) >= 2) {
+    geometry_msgs::msg::Twist base_cmd;
+    base_cmd.linear.x  = command(0);
+    base_cmd.linear.y  = 0.0;
+    base_cmd.linear.z  = 0.0;
+    base_cmd.angular.x = 0.0;
+    base_cmd.angular.y = 0.0;
+    base_cmd.angular.z = command(1);
+    base_cmd_pub_->publish(base_cmd);
+  }
+
+  // --- Arm position commands (hardware supports position interface @ 250Hz) ---
+  if (joint_position_commands_.size() < arm_dim || arm_dim == 0) {
+    return;
+  }
+
+  // Assume wheel-based state layout: [x, y, yaw, q0, q1, ...]
+  const Eigen::Index arm_state_offset = 3;
+
+  for (size_t idx = 0; idx < arm_dim; ++idx) {
+    auto* cmd = joint_position_commands_[idx];
+    if (!cmd) {
+      continue;
+    }
+
+    const Eigen::Index si = arm_state_offset + static_cast<Eigen::Index>(idx);
+    if (si >= x_next.size()) {
+      continue;
+    }
+
+    // Set next-step desired joint position from rollout result
+    cmd->set_value(x_next(si));
+  }
+}
+
 controller_interface::return_type OCS2Controller::update(
   const rclcpp::Time & time, const rclcpp::Duration & period)
 {
-  if (!handles_initialized_) {
+  if (!handles_initialized_ || !mrt_) {
     return controller_interface::return_type::ERROR;
   }
 
-  if (!mrt_) {
-    return controller_interface::return_type::ERROR;
+  const double dt = period.seconds();
+  if (dt <= 0.0) {
+    return controller_interface::return_type::OK;
   }
 
+  // 1) Build observation (current measured state)
   auto observation = buildObservation(time);
+
+  // 2) Feed observation to MRT and update policy (non-blocking / best effort)
   mrt_->setCurrentObservation(observation);
   mrt_->spinMRT();
   mrt_->updatePolicy();
 
-  vector_t mpc_state(state_dim_);
-  vector_t mpc_input(input_dim_);
-  size_t mode = 0;
+  // Prepare buffers
+  vector_t x_next(state_dim_);
+  vector_t u_end(input_dim_);
+  size_t mode_end = 0;
 
   if (mrt_->initialPolicyReceived()) {
-    mrt_->evaluatePolicy(
-      observation.time + future_time_offset_, observation.state, mpc_state, mpc_input, mode);
-    if (command_smoothing_alpha_ < 1.0) {
-      mpc_input =
-        command_smoothing_alpha_ * mpc_input + (1.0 - command_smoothing_alpha_) * last_command_;
-    }
-    applyCommand(mpc_input, period.seconds());
-    last_command_ = mpc_input;
-  } else {
-    vector_t zero = vector_t::Zero(input_dim_);
-    applyCommand(zero, period.seconds());
-    last_command_ = zero;
-  }
+    // 3) Rollout ONE controller period with the same integrator as ocs2 dummy mrt sim (e.g., ODE45)
+    //    This makes base+arm propagation consistent (instead of ZOH + external fake odom).
+    mrt_->rolloutPolicy(
+      observation.time + future_time_offset_,   // compensate measurement/actuation delay if needed
+      observation.state,
+      dt,
+      x_next,
+      u_end,
+      mode_end
+    );
 
-  if (visualization_ && mrt_->initialPolicyReceived()) {
-    visualization_->update(observation.state, mrt_->getPolicy(), mrt_->getCommand());
+    // Optional: command smoothing
+    // WARNING: smoothing u_end AFTER rollout makes (u_end, x_next) inconsistent.
+    // Suggestion: temporarily disable smoothing to validate stability, or implement smoothing INSIDE policy (more work).
+    if (command_smoothing_alpha_ < 1.0) {
+      // If you still want smoothing, at least apply it only to the base cmd to avoid x_next mismatch on arm.
+      vector_t u_smoothed = u_end;
+      u_smoothed(0) = command_smoothing_alpha_ * u_end(0) + (1.0 - command_smoothing_alpha_) * last_command_(0);
+      u_smoothed(1) = command_smoothing_alpha_ * u_end(1) + (1.0 - command_smoothing_alpha_) * last_command_(1);
+      // Keep arm part unchanged to stay consistent with x_next.
+      for (Eigen::Index i = 2; i < u_end.size(); ++i) {
+        u_smoothed(i) = u_end(i);
+      }
+      u_end = u_smoothed;
+    }
+
+    // 4) Apply base cmd (twist) AND arm pos command using x_next
+    applyCommandUsingNextState(u_end, x_next);
+
+    last_command_ = u_end;
+
+    // Visualization (same as before)
+    if (visualization_) {
+      visualization_->update(observation.state, mrt_->getPolicy(), mrt_->getCommand());
+    }
+
+  } else {
+    // No policy yet: send zeros
+    vector_t zero = vector_t::Zero(input_dim_);
+    // Build a "do nothing" next state from current measured state
+    x_next = observation.state;
+    applyCommandUsingNextState(zero, x_next);
+    last_command_ = zero;
   }
 
   return controller_interface::return_type::OK;

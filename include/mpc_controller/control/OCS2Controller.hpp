@@ -49,6 +49,8 @@ public:
 
   controller_interface::InterfaceConfiguration state_interface_configuration() const override;
 
+  void applyCommandUsingNextState(const ocs2::vector_t& command, const ocs2::vector_t& x_next);
+
   controller_interface::return_type update(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
