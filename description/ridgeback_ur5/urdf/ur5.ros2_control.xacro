@@ -72,6 +72,7 @@
       <xacro:if value="${use_fake_hardware}">
         <plugin>mock_components/GenericSystem</plugin>
         <param name="mock_sensor_commands">false</param>
+        <param name="calculate_dynamics">true</param>
         <param name="position_state_following_offset">0.0</param>
       </xacro:if>
     </hardware>
