@@ -18,6 +18,7 @@ find_package(control_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(ocs2_core REQUIRED)
 find_package(ocs2_mpc REQUIRED)
+find_package(ocs2_sqp REQUIRED)
 find_package(ocs2_ros_interfaces REQUIRED)
 find_package(ocs2_mobile_manipulator REQUIRED)
 find_package(ocs2_self_collision_visualization REQUIRED)
@@ -52,6 +53,7 @@ ament_target_dependencies(${PROJECT_NAME}
   nav_msgs
   ocs2_core
   ocs2_mpc
+  ocs2_sqp
   ocs2_ros_interfaces
   ocs2_mobile_manipulator
   ocs2_self_collision_visualization
@@ -62,6 +64,7 @@ pluginlib_export_plugin_description_file(controller_interface mpc_controller_plu
 set(OCS2_CONTROL_NODE_DEPENDENCIES
   rclcpp
   ocs2_mobile_manipulator
+  ocs2_sqp
   ocs2_ros_interfaces
   ocs2_msgs
   std_srvs
@@ -69,9 +72,15 @@ set(OCS2_CONTROL_NODE_DEPENDENCIES
   visualization_msgs
 )
 
+# MPC node
 add_executable(mobile_manipulator_mpc_node src/mpc/MobileManipulatorMpcNode.cpp)
 ament_target_dependencies(mobile_manipulator_mpc_node ${OCS2_CONTROL_NODE_DEPENDENCIES} ocs2_core ocs2_mpc)
 target_link_libraries(mobile_manipulator_mpc_node yaml-cpp)
+
+# SQP MPC node
+add_executable(mobile_manipulator_sqp_mpc_node src/mpc/MobileManipulatorSqpMpcNode.cpp)
+ament_target_dependencies(mobile_manipulator_sqp_mpc_node ${OCS2_CONTROL_NODE_DEPENDENCIES} ocs2_core ocs2_sqp)
+target_link_libraries(mobile_manipulator_sqp_mpc_node yaml-cpp)
 
 add_executable(mobile_manipulator_marker_target src/command/MobileManipulatorMarkerTarget.cpp)
 ament_target_dependencies(mobile_manipulator_marker_target ${OCS2_CONTROL_NODE_DEPENDENCIES})
@@ -98,6 +107,7 @@ install(
 
 install(TARGETS
   mobile_manipulator_mpc_node
+  mobile_manipulator_sqp_mpc_node
   mobile_manipulator_marker_target
   mobile_manipulator_twist_target
   mobile_manipulator_trajectory_target
@@ -150,6 +160,7 @@ ament_export_dependencies(
   nav_msgs
   ocs2_core
   ocs2_mpc
+  ocs2_sqp
   ocs2_ros_interfaces
   ocs2_mobile_manipulator
   ocs2_self_collision_visualization

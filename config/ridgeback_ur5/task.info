@@ -80,32 +80,33 @@ mpc
   
   debugPrint                      false
 
-  mpcDesiredFrequency             -1.0   ; [Hz] // 100.0; -1.0 (negative for best effort policy rollout!)
+  mpcDesiredFrequency              -1.0   ; [Hz] // 100.0; -1.0 (negative for best effort policy rollout!)
   mrtDesiredFrequency             500.0   ; [Hz] // 500.0
 }
 
-mpc_new
+; Multiple_Shooting SQP settings
+sqp
 {
-  timeHorizon                     2.0   ; [s] // 1.0, 2.0
-  solutionTimeWindow              -1.0   ; [s] // 0.2, 0.4
-  coldStart                       false
-  
-  debugPrint                      false
+  nThreads                              3
+  dt                                    0.01
+  sqpIteration                          1
+  deltaTol                              1e-4
+  costTol                               1e-4
 
-  mpcDesiredFrequency             125.0   ; [Hz] // 100.0, 125.0, -1.0 (negative for best effort policy rollout!)
-  mrtDesiredFrequency             250.0   ; [Hz] // 500.0
-}
+  g_max                                 1e6
+  g_min                                 1e-6
+  inequalityConstraintMu                0.0
+  inequalityConstraintDelta             1e-6
 
-mpc_old
-{
-  timeHorizon                     2.0   ; [s] // 1.0, 2.0
-  solutionTimeWindow              0.2   ; [s] // 0.2, 0.4
-  coldStart                       false
-  
-  debugPrint                      false
+  projectStateInputEqualityConstraints  true
+  printSolverStatistics                 true
+  printSolverStatus                     false
+  printLinesearch                       false
 
-  mpcDesiredFrequency             -1.0   ; [Hz] // 100.0; -1.0 (negative for best effort policy rollout!)
-  mrtDesiredFrequency             500.0   ; [Hz] // 500.0
+  useFeedbackPolicy                     true
+  integratorType                        RK2
+
+  logFilePath                           /tmp/ocs2/sqp_log/
 }
 
 ; initial state
@@ -242,6 +243,33 @@ selfCollision
   minimumDistance  0.1
 
   ; relaxed log barrier mu
+  mu     0.01
+
+  ; relaxed log barrier delta
+  delta  0.001
+  
+  ; TODO: Replace the collision meshes of the arm with primitive shapes.
+}
+
+selfCollision_old
+{ 
+  ; activate self-collision constraint
+  activate  true // false; true
+
+  ; Self Collision raw object pairs
+  collisionObjectPairs
+  {
+    //[0] "5, 8"
+    [0] "5, 9"
+    //[2] "5, 10"
+    //[3] "5, 11"
+    //[4] "5, 12"
+  }
+
+  ; minimum distance allowed between the pairs
+  minimumDistance  0.1
+
+  ; relaxed log barrier mu
   mu     1e-2
 
   ; relaxed log barrier delta
@@ -296,20 +324,20 @@ jointVelocityLimits
 
       wheelBasedMobileManipulator
       {
-        (0,0)  -0.2 ; forward velocity
-        (1,0)  -0.7 ; turning velocity
+        (0,0)  -0.5 ; forward velocity
+        (1,0)  -1.0 ; turning velocity
       }
     }
 
     ; velocity limits for the arm DOFs
     arm
     {
-      (0,0)  -0.7  ; ur_arm_shoulder_pan_joint velocity
-      (1,0)  -0.7  ; ur_arm_shoulder_lift_joint velocity
-      (2,0)  -0.7  ; ur_arm_elbow_joint velocity
-      (3,0)  -0.7  ; ur_arm_wrist_1_joint velocity
-      (4,0)  -0.7  ; ur_arm_wrist_2_joint velocity
-      (5,0)  -0.7  ; ur_arm_wrist_3_joint velocity
+      (0,0)  -1.0  ; ur_arm_shoulder_pan_joint velocity
+      (1,0)  -1.0  ; ur_arm_shoulder_lift_joint velocity
+      (2,0)  -1.0  ; ur_arm_elbow_joint velocity
+      (3,0)  -1.0  ; ur_arm_wrist_1_joint velocity
+      (4,0)  -1.0  ; ur_arm_wrist_2_joint velocity
+      (5,0)  -1.0  ; ur_arm_wrist_3_joint velocity
     }
   }
 
@@ -338,20 +366,20 @@ jointVelocityLimits
 
       wheelBasedMobileManipulator
       {
-        (0,0)  0.2 ; forward velocity
-        (1,0)  0.7 ; turning velocity
+        (0,0)  0.5 ; forward velocity
+        (1,0)  1.0 ; turning velocity
       }
     }
 
     ; velocity limits for the arm DOFs
     arm
     {
-      (0,0)  0.7  ; ur_arm_shoulder_pan_joint velocity
-      (1,0)  0.7  ; ur_arm_shoulder_lift_joint velocity
-      (2,0)  0.7  ; ur_arm_elbow_joint velocity
-      (3,0)  0.7  ; ur_arm_wrist_1_joint velocity
-      (4,0)  0.7  ; ur_arm_wrist_2_joint velocity
-      (5,0)  0.7  ; ur_arm_wrist_3_joint velocity
+      (0,0)  1.0  ; ur_arm_shoulder_pan_joint velocity
+      (1,0)  1.0  ; ur_arm_shoulder_lift_joint velocity
+      (2,0)  1.0  ; ur_arm_elbow_joint velocity
+      (3,0)  1.0  ; ur_arm_wrist_1_joint velocity
+      (4,0)  1.0  ; ur_arm_wrist_2_joint velocity
+      (5,0)  1.0  ; ur_arm_wrist_3_joint velocity
     }
   }
 }

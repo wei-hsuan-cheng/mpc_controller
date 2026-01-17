@@ -42,6 +42,7 @@ def generate_launch_description():
         DeclareLaunchArgument("rviz", default_value="true"),
         DeclareLaunchArgument("use_fake_hardware", default_value="true"),
         DeclareLaunchArgument("use_fake_odom", default_value="true"),
+        DeclareLaunchArgument("solver", default_value="ddp", description="MPC solver: ddp or sqp"),
         DeclareLaunchArgument("taskFile", default_value=task_default),
         DeclareLaunchArgument("urdfFile", default_value=urdf_default),
         DeclareLaunchArgument("libFolder", default_value="/tmp/ocs2_auto_generated/ridgeback_ur5"),
@@ -101,9 +102,15 @@ def generate_launch_description():
         output='screen',
     )
 
+    # MPC node: select executable based on solver argument
+    mpc_solver = LaunchConfiguration("solver")
+    mpc_executable_name = \
+        "mobile_manipulator_mpc_node" if mpc_solver == "ddp" \
+        else "mobile_manipulator_sqp_mpc_node"
+
     mpc_node = Node(
         package="mpc_controller",
-        executable="mobile_manipulator_mpc_node",
+        executable=mpc_executable_name,
         name="mobile_manipulator_mpc",
         output="screen",
         parameters=[
