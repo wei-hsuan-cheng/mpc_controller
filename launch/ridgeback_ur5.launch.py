@@ -134,7 +134,7 @@ def generate_launch_description():
                 "odom_topic": LaunchConfiguration("odomTopic"),
                 "frame_id": LaunchConfiguration("globalFrame"),
                 "child_frame_id": "base_link",
-                "publish_rate": 200.0,
+                "publish_rate": 250.0,
                 "x0": LaunchConfiguration("baseX0"),
                 "y0": LaunchConfiguration("baseY0"),
                 "yaw0": LaunchConfiguration("baseYaw0"),
