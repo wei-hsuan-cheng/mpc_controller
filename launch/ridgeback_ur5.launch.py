@@ -104,9 +104,9 @@ def generate_launch_description():
 
     # MPC node: select executable based on solver argument
     mpc_solver = LaunchConfiguration("solver")
-    mpc_executable_name = \
-        "mobile_manipulator_mpc_node" if mpc_solver == "ddp" \
-        else "mobile_manipulator_sqp_mpc_node"
+    mpc_executable_name = PythonExpression([
+        "'mobile_manipulator_mpc_node' if '", mpc_solver, "' == 'ddp' else 'mobile_manipulator_sqp_mpc_node'"
+    ])
 
     mpc_node = Node(
         package="mpc_controller",

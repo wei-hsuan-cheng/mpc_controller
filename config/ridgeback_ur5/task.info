@@ -81,7 +81,7 @@ mpc
   debugPrint                      false
 
   mpcDesiredFrequency              -1.0   ; [Hz] // 100.0; -1.0 (negative for best effort policy rollout!)
-  mrtDesiredFrequency             500.0   ; [Hz] // 500.0
+  mrtDesiredFrequency             250.0   ; [Hz] // 500.0
 }
 
 ; Multiple_Shooting SQP settings
