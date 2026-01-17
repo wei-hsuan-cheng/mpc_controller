@@ -35,7 +35,7 @@ def generate_launch_description():
         [mpc_share, "config", "ridgeback_ur5", "ros2_controllers.yaml"]
     )
     arm_control_xacro = PathJoinSubstitution(
-        [mpc_share, "description", "ridgeback_ur5", "urdf", "ur5_arm_ros2_control.urdf.xacro"]
+        [mpc_share, "description", "ridgeback_ur5", "urdf", "ur5.ros2_control.xacro"]
     )
 
     declared_arguments = [
