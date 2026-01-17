@@ -73,7 +73,7 @@ def generate_launch_description():
         "robot_description": ParameterValue(robot_description_content, value_type=str)
     }
 
-    control_node = Node(
+    ros2_control_node = Node(
         package="controller_manager",
         executable="ros2_control_node",
         output="screen",
@@ -83,37 +83,22 @@ def generate_launch_description():
         ],
     )
 
-    spawn_joint_state_broadcaster = ExecuteProcess(
-        cmd=[
-            "ros2",
-            "run",
-            "controller_manager",
-            "spawner",
-            "joint_state_broadcaster",
-            "--controller-manager",
-            "/controller_manager",
-        ],
-        output="screen",
+    controller_sequence_script = PathJoinSubstitution(
+        [FindPackageShare('mpc_controller'), 'launch', 'controller_sequence.py']
     )
 
-    spawn_mpc_controller = ExecuteProcess(
+    controller_sequence = ExecuteProcess(
         cmd=[
-            "ros2",
-            "run",
-            "controller_manager",
-            "spawner",
-            "mpc_controller",
-            "--controller-manager",
-            "/controller_manager",
+            'python3',
+            controller_sequence_script,
+            '--controller-manager',
+            '/controller_manager',
+            '--robot-description-topic',
+            '/robot_description',
+            '--timeout',
+            '120',
         ],
-        output="screen",
-    )
-
-    spawn_on_control_start = RegisterEventHandler(
-        event_handler=OnProcessStart(
-            target_action=control_node,
-            on_start=[spawn_joint_state_broadcaster, spawn_mpc_controller],
-        )
+        output='screen',
     )
 
     mpc_node = Node(
@@ -197,12 +182,12 @@ def generate_launch_description():
     return LaunchDescription(
         declared_arguments
         + [
-            control_node,
-            spawn_on_control_start,
-            fake_odom_node,
             world_tf_node,
-            mpc_node,
-            command_launch,
             visualize_launch,
+            fake_odom_node,
+            mpc_node,
+            ros2_control_node,
+            controller_sequence,
+            command_launch,
         ]
     )
