@@ -156,6 +156,8 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(
   initial_observation_.mode = 0;
   initial_target_ = TargetTrajectories();
   last_command_ = vector_t::Zero(input_dim_);
+  last_base_cmd_ = vector_t::Zero(2);
+  last_arm_pos_cmd_ = vector_t::Zero(static_cast<Eigen::Index>(arm_joint_names_.size()));
 
   // Base command and odom interfaces
   base_cmd_pub_ =
@@ -193,6 +195,28 @@ controller_interface::CallbackReturn OCS2Controller::on_activate(
   const auto now = get_node()->now();
   initial_observation_ = buildObservation(now);
   initial_target_ = computeInitialTarget(initial_observation_.state, initial_observation_.time);
+
+  // Reset command memory so alpha=0 really holds.
+  last_command_ = vector_t::Zero(input_dim_);
+  last_base_cmd_ = vector_t::Zero(2);
+  // Initialize arm LPF memory to current measured joints (hold...)
+  {
+    const Eigen::Index arm_state_offset = 3;
+    const Eigen::Index arm_dim = static_cast<Eigen::Index>(arm_joint_names_.size());
+    if (arm_dim > 0) {
+      last_arm_pos_cmd_.resize(arm_dim);
+      for (Eigen::Index i = 0; i < arm_dim; ++i) {
+        const Eigen::Index si = arm_state_offset + i;
+        last_arm_pos_cmd_(i) = (si < initial_observation_.state.size()) ? initial_observation_.state(si) : 0.0;
+      }
+    }
+  }
+
+  // Actively hold once on activation: base zero, arm holds current posture.
+  {
+    vector_t zero_u = vector_t::Zero(input_dim_);
+    applyCommandUsingNextState(zero_u, initial_observation_.state);
+  }
 
   if (mrt_) {
     mrt_->reset();
@@ -281,6 +305,101 @@ void OCS2Controller::applyCommandUsingNextState(const vector_t& command, const v
   }
 }
 
+void OCS2Controller::applyFilteredRolloutCommand(
+  const vector_t& u_rollout, const vector_t& x_next, const vector_t& x_meas, double dt)
+{
+  const Eigen::Index arm_offset = 3;
+  const Eigen::Index arm_dim = static_cast<Eigen::Index>(arm_joint_names_.size());
+
+  // Safety: dt needed for converting position cmd -> equivalent velocity for obs.input.
+  if (dt <= 0.0) {
+    return;
+  }
+
+  // --- Base command (2 DoF) ---
+  vector_t base_u = vector_t::Zero(2);
+  if (u_rollout.size() >= 2) {
+    base_u(0) = u_rollout(0);
+    base_u(1) = u_rollout(1);
+  }
+
+  vector_t base_u_cmd = vector_t::Zero(2);
+
+  // --- Arm position command ---
+  vector_t q_meas = vector_t::Zero(arm_dim);
+  for (Eigen::Index i = 0; i < arm_dim; ++i) {
+    const Eigen::Index si = arm_offset + i;
+    if (si < x_meas.size()) {
+      q_meas(i) = x_meas(si);
+    }
+  }
+
+  vector_t q_rollout = q_meas;
+  for (Eigen::Index i = 0; i < arm_dim; ++i) {
+    const Eigen::Index si = arm_offset + i;
+    if (si < x_next.size()) {
+      q_rollout(i) = x_next(si);
+    }
+  }
+
+  // Initialize LPF memories if sizes differ (e.g., on first cycle)
+  if (last_base_cmd_.size() != 2) {
+    last_base_cmd_ = vector_t::Zero(2);
+  }
+  if (last_arm_pos_cmd_.size() != arm_dim) {
+    last_arm_pos_cmd_ = q_meas;
+  }
+
+  vector_t q_cmd = q_meas;
+
+  if (command_smoothing_alpha_ <= 0.0) {
+    // HOLD
+    base_u_cmd.setZero();
+    last_base_cmd_.setZero();
+    q_cmd = q_meas;
+    last_arm_pos_cmd_ = q_meas;
+  } else if (command_smoothing_alpha_ >= 1.0) {
+    // NO FILTER
+    base_u_cmd = base_u;
+    q_cmd = q_rollout;
+    last_base_cmd_ = base_u_cmd;
+    last_arm_pos_cmd_ = q_cmd;
+  } else {
+    // LPF
+    base_u_cmd = command_smoothing_alpha_ * base_u + (1.0 - command_smoothing_alpha_) * last_base_cmd_;
+    q_cmd = command_smoothing_alpha_ * q_rollout + (1.0 - command_smoothing_alpha_) * last_arm_pos_cmd_;
+    last_base_cmd_ = base_u_cmd;
+    last_arm_pos_cmd_ = q_cmd;
+  }
+
+  // Build a commanded "next state" that encodes the filtered joint position command.
+  vector_t x_cmd = x_meas;
+  for (Eigen::Index i = 0; i < arm_dim; ++i) {
+    const Eigen::Index si = arm_offset + i;
+    if (si < x_cmd.size()) {
+      x_cmd(si) = q_cmd(i);
+    }
+  }
+
+  // Build an equivalent input vector for logging/observation.input consistency.
+  // Model input is [v_base, w_base, dq_arm...]. We approximate dq_arm from position command.
+  vector_t u_cmd = vector_t::Zero(input_dim_);
+  if (u_cmd.size() >= 2) {
+    u_cmd(0) = base_u_cmd(0);
+    u_cmd(1) = base_u_cmd(1);
+  }
+  for (Eigen::Index i = 0; i < arm_dim; ++i) {
+    const Eigen::Index ui = 2 + i;
+    if (ui < u_cmd.size()) {
+      u_cmd(ui) = (q_cmd(i) - q_meas(i)) / dt;
+    }
+  }
+  last_command_ = u_cmd;
+
+  // Apply to hardware: base velocity + arm position
+  applyCommandUsingNextState(u_cmd, x_cmd);
+}
+
 controller_interface::return_type OCS2Controller::update(
   const rclcpp::Time & time, const rclcpp::Duration & period)
 {
@@ -299,14 +418,40 @@ controller_interface::return_type OCS2Controller::update(
   // 2) Feed observation to MRT and update policy (non-blocking / best effort)
   mrt_->setCurrentObservation(observation);
   mrt_->spinMRT();
-  mrt_->updatePolicy();
+  const bool policy_updated = mrt_->updatePolicy();
+  const bool have_policy = mrt_->initialPolicyReceived();
 
   // Prepare buffers
   vector_t x_next(state_dim_);
   vector_t u_end(input_dim_);
   size_t mode_end = 0;
 
-  if (mrt_->initialPolicyReceived()) {
+  if (!have_policy) {
+    // No policy yet: HOLD current posture
+    vector_t zero_u = vector_t::Zero(input_dim_);
+    applyCommandUsingNextState(zero_u, observation.state);
+
+    // Reset filter states so alpha=0 always holds deterministically.
+    last_command_.setZero();
+    last_base_cmd_.setZero();
+    if (static_cast<size_t>(last_arm_pos_cmd_.size()) == arm_joint_names_.size()) {
+      const Eigen::Index off = 3;
+      for (size_t i = 0; i < arm_joint_names_.size(); ++i) {
+        const Eigen::Index si = off + static_cast<Eigen::Index>(i);
+        if (si < observation.state.size()) {
+          last_arm_pos_cmd_(static_cast<Eigen::Index>(i)) = observation.state(si);
+        }
+      }
+    }
+
+    if (visualization_ && policy_updated) {
+      visualization_->update(observation.state, mrt_->getPolicy(), mrt_->getCommand());
+    }
+    return controller_interface::return_type::OK;
+  }
+
+  // We have a policy:
+  {
     // 3) Rollout ONE controller period with the same integrator as ocs2 dummy mrt sim (e.g., ODE45)
     //    This makes base+arm propagation consistent (instead of ZOH + external fake odom).
     mrt_->rolloutPolicy(
@@ -318,38 +463,14 @@ controller_interface::return_type OCS2Controller::update(
       mode_end
     );
 
-    // Optional: command smoothing
-    // WARNING: smoothing u_end AFTER rollout makes (u_end, x_next) inconsistent.
-    // Suggestion: temporarily disable smoothing to validate stability, or implement smoothing INSIDE policy (more work).
-    if (command_smoothing_alpha_ < 1.0) {
-      // If you still want smoothing, at least apply it only to the base cmd to avoid x_next mismatch on arm.
-      vector_t u_smoothed = u_end;
-      u_smoothed(0) = command_smoothing_alpha_ * u_end(0) + (1.0 - command_smoothing_alpha_) * last_command_(0);
-      u_smoothed(1) = command_smoothing_alpha_ * u_end(1) + (1.0 - command_smoothing_alpha_) * last_command_(1);
-      // Keep arm part unchanged to stay consistent with x_next.
-      for (Eigen::Index i = 2; i < u_end.size(); ++i) {
-        u_smoothed(i) = u_end(i);
-      }
-      u_end = u_smoothed;
-    }
+    // 4) Apply filtered command:
+    //    - base: cmd_vel (velocity)
+    //    - arm: position interface, command blended joint positions
+    applyFilteredRolloutCommand(u_end, x_next, observation.state, dt);
 
-    // 4) Apply base cmd (twist) AND arm pos command using x_next
-    applyCommandUsingNextState(u_end, x_next);
-
-    last_command_ = u_end;
-
-    // Visualization (same as before)
-    if (visualization_) {
+    if (visualization_ && policy_updated) {
       visualization_->update(observation.state, mrt_->getPolicy(), mrt_->getCommand());
     }
-
-  } else {
-    // No policy yet: send zeros
-    vector_t zero = vector_t::Zero(input_dim_);
-    // Build a "do nothing" next state from current measured state
-    x_next = observation.state;
-    applyCommandUsingNextState(zero, x_next);
-    last_command_ = zero;
   }
 
   return controller_interface::return_type::OK;
@@ -366,6 +487,18 @@ void OCS2Controller::resetMpc()
     initial_observation_ = buildObservation(now);
     initial_target_ =
       computeInitialTarget(initial_observation_.state, initial_observation_.time);
+
+    // Reset smoothing memories to a clean "hold current" state.
+    last_command_.setZero();
+    last_base_cmd_ = vector_t::Zero(2);
+    last_arm_pos_cmd_ = vector_t::Zero(static_cast<Eigen::Index>(arm_joint_names_.size()));
+    for (Eigen::Index i = 0; i < static_cast<Eigen::Index>(arm_joint_names_.size()); ++i) {
+      const Eigen::Index si = 3 + i;
+      if (si < initial_observation_.state.size()) {
+        last_arm_pos_cmd_(i) = initial_observation_.state(si);
+      }
+    }
+
     mrt_->resetMpcNode(initial_target_);
     mpc_reset_done_ = true;
     RCLCPP_INFO(get_node()->get_logger(), "[OCS2Controller] requested MPC reset.");
