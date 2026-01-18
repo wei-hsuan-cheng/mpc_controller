@@ -24,12 +24,12 @@ ddp
 {
   algorithm                       SLQ // SLQ, ILQR
 
-  nThreads                        3
+  nThreads                        4
   threadPriority                  50
 
   maxNumIterations                1 // 1; 10
   minRelCost                      0.1
-  constraintTolerance             1e-3
+  constraintTolerance             5e-3
 
   displayInfo                     false // false; true
   displayShortSummary             false // false; true
@@ -39,8 +39,8 @@ ddp
 
   AbsTolODE                       1e-5
   RelTolODE                       1e-3
-  maxNumStepsPerSecond            100000
-  timeStep                        1e-3
+  maxNumStepsPerSecond            10000
+  timeStep                        0.01 // 0.0125, 80 [Hz], 0.01, 100 [Hz]
   backwardPassIntegratorType      ODE45
 
   constraintPenaltyInitialValue   20.0
@@ -56,32 +56,29 @@ ddp
     minStepLength                 1e-2
     maxStepLength                 1.0
     hessianCorrectionStrategy     DIAGONAL_SHIFT
-    hessianCorrectionMultiple     1e-3
+    hessianCorrectionMultiple     1e-5
   }
 }
 
 ; Multiple_Shooting SQP settings
 sqp
 {
-  nThreads                              3
-  dt                                    0.01
+  nThreads                              4
+  dt                                    0.01 // 0.0125, 80 [Hz], 0.01, 100 [Hz]
   sqpIteration                          1
   deltaTol                              1e-4
   costTol                               1e-4
-
-  g_max                                 1e6
+  g_max                                 1e-2
   g_min                                 1e-6
-  inequalityConstraintMu                0.0
-  inequalityConstraintDelta             1e-6
-
+  inequalityConstraintMu                0.1
+  inequalityConstraintDelta             5.0
   projectStateInputEqualityConstraints  true
   printSolverStatistics                 true
   printSolverStatus                     false
   printLinesearch                       false
-
   useFeedbackPolicy                     true
   integratorType                        RK2
-
+  threadPriority                        50
   logFilePath                           /tmp/ocs2/sqp_log/
 }
 
@@ -90,9 +87,9 @@ rollout
 {
   AbsTolODE                       1e-5
   RelTolODE                       1e-3
-  timeStep                        1e-2
+  timeStep                        0.01 // 0.0125, 80 [Hz], 0.01, 100 [Hz]
   integratorType                  ODE45
-  maxNumStepsPerSecond            100000
+  maxNumStepsPerSecond            10000
   checkNumericalStability         false
 }
 
@@ -100,12 +97,12 @@ rollout
 mpc
 {
   timeHorizon                     2.0   ; [s] // 1.0, 2.0
-  solutionTimeWindow              0.2   ; [s] // 0.2, 0.4
+  solutionTimeWindow              0.2   ; [s] // 0.2, 0.4, -1 maximum [s]
   coldStart                       false
   
   debugPrint                      false
 
-  mpcDesiredFrequency              -1.0   ; [Hz] // 100.0; -1.0 (negative for best effort policy rollout!)
+  mpcDesiredFrequency             100.0   ; [Hz] // 80, 100.0, -1.0 (negative for best effort policy rollout!)
   mrtDesiredFrequency             250.0   ; [Hz] // 500.0
 }
 
