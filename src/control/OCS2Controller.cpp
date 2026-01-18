@@ -308,7 +308,6 @@ void OCS2Controller::applyCommandUsingNextState(const vector_t& command, const v
 void OCS2Controller::applyFilteredRolloutCommand(
   const vector_t& u_rollout, const vector_t& x_next, const vector_t& x_meas, double dt)
 {
-  const double a = command_smoothing_alpha_;
   const Eigen::Index arm_offset = 3;
   const Eigen::Index arm_dim = static_cast<Eigen::Index>(arm_joint_names_.size());
 
@@ -353,13 +352,13 @@ void OCS2Controller::applyFilteredRolloutCommand(
 
   vector_t q_cmd = q_meas;
 
-  if (a <= 0.0) {
+  if (command_smoothing_alpha_ <= 0.0) {
     // HOLD
     base_u_cmd.setZero();
     last_base_cmd_.setZero();
     q_cmd = q_meas;
     last_arm_pos_cmd_ = q_meas;
-  } else if (a >= 1.0) {
+  } else if (command_smoothing_alpha_ >= 1.0) {
     // NO FILTER
     base_u_cmd = base_u;
     q_cmd = q_rollout;
@@ -367,8 +366,8 @@ void OCS2Controller::applyFilteredRolloutCommand(
     last_arm_pos_cmd_ = q_cmd;
   } else {
     // LPF
-    base_u_cmd = a * base_u + (1.0 - a) * last_base_cmd_;
-    q_cmd = a * q_rollout + (1.0 - a) * last_arm_pos_cmd_;
+    base_u_cmd = command_smoothing_alpha_ * base_u + (1.0 - command_smoothing_alpha_) * last_base_cmd_;
+    q_cmd = command_smoothing_alpha_ * q_rollout + (1.0 - command_smoothing_alpha_) * last_arm_pos_cmd_;
     last_base_cmd_ = base_u_cmd;
     last_arm_pos_cmd_ = q_cmd;
   }
