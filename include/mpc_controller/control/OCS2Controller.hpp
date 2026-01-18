@@ -10,19 +10,20 @@
 #include <controller_interface/controller_interface.hpp>
 #include <hardware_interface/loaned_command_interface.hpp>
 #include <hardware_interface/loaned_state_interface.hpp>
+
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/state.hpp>
 
+#include <control_msgs/msg/joint_jog.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <nav_msgs/msg/odometry.hpp>
-#include <control_msgs/msg/joint_jog.hpp>
 
 #include <ocs2_core/Types.h>
-#include <ocs2_ros_interfaces/mrt/MRT_ROS_Interface.h>
 #include <ocs2_core/reference/TargetTrajectories.h>
-#include <ocs2_core/misc/LoadData.h>
 #include <ocs2_mpc/SystemObservation.h>
 #include <ocs2_mobile_manipulator/MobileManipulatorInterface.h>
+#include <ocs2_ros_interfaces/mrt/MRT_ROS_Interface.h>
+
 #include "mpc_controller/visualization/MobileManipulatorVisualization.h"
 
 namespace mpc_controller
@@ -54,50 +55,78 @@ private:
   using TargetTrajectories = ocs2::TargetTrajectories;
   using MobileManipulatorInterface = ocs2::mobile_manipulator::MobileManipulatorInterface;
 
-  // ===== Helpers =====
+  enum class LoopMode { kAuto, kSynchronized, kRealtime };
+
+  // ===== Params helpers (robust to int/double overrides) =====
+  static void declareIfUndeclaredNotSet(
+    const rclcpp_lifecycle::LifecycleNode::SharedPtr& node, const std::string& name);
+
+  static double getParamAsDouble(
+    const rclcpp_lifecycle::LifecycleNode::SharedPtr& node,
+    const std::string& name,
+    double default_value);
+
+  static std::string getParamAsString(
+    const rclcpp_lifecycle::LifecycleNode::SharedPtr& node,
+    const std::string& name,
+    const std::string& default_value);
+
+  static bool getParamAsBool(
+    const rclcpp_lifecycle::LifecycleNode::SharedPtr& node,
+    const std::string& name,
+    bool default_value);
+
+  static std::vector<std::string> getParamAsStringArray(
+    const rclcpp_lifecycle::LifecycleNode::SharedPtr& node,
+    const std::string& name,
+    const std::vector<std::string>& default_value);
+
+  // ===== Loop helpers =====
+  static LoopMode parseLoopMode(const std::string & s);
+  void resolveLoopMode();
+
   bool initializeHandles();
-
-  SystemObservation buildObservation(const rclcpp::Time & time) const;
-
+  SystemObservation buildObservation(double time_sec) const;
   TargetTrajectories computeInitialTarget(const vector_t & state, double time) const;
 
   void resetMpc();
+  void applyHoldCommand(const SystemObservation & observation);
+  void applyFilteredRolloutCommand(const vector_t & u_end, const vector_t & x_next);
 
-  // Hold behavior: base=0, arm=hold current joint pos (from observation.state)
-  void applyHoldCommand(const SystemObservation& observation);
+  controller_interface::return_type runSynchronizedLoopStep();
+  controller_interface::return_type runRealtimeLoopStep();
 
-  // Apply rollout result with alpha LPF:
-  // - base uses u_end (vel) LPF
-  // - arm uses x_next (pos) LPF
-  void applyFilteredRolloutCommand(const vector_t& u_end, const vector_t& x_next);
-
-  // ---- Dummy-like policy freshness gate ----
-  bool policyUpdatedForTime(double time, double policy_dt);
-  bool waitForFreshPolicy(double desired_time, double policy_dt);
+  bool policyIsFreshForTime(double desired_time, double policy_dt);
 
 private:
   // ===== Parameters =====
   std::string task_file_;
   std::string lib_folder_;
   std::string urdf_file_;
-  std::string global_frame_;
+  std::string global_frame_{"world"};
 
   double future_time_offset_{0.0};
   double command_smoothing_alpha_{1.0};
   bool use_moveit_servo_{false};
-
   std::vector<std::string> arm_joint_names_;
 
   std::string base_cmd_topic_{"/cmd_vel"};
   std::string odom_topic_{"/odom"};
   std::string joint_jog_topic_{"/servo_node/delta_joint_cmds"};
 
-  // Dummy-like sync settings
-  bool sync_policy_updates_{true};
-  double mpc_desired_frequency_{100.0};   // from task.info (default)
-  double mrt_desired_frequency_{250.0};   // from task.info (default)
-  double policy_time_tolerance_factor_{0.1};  // same as dummy
-  double max_policy_wait_seconds_{0.0};       // 0 -> auto
+  // Dummy-like loop settings
+  std::string loop_mode_str_{"auto"};
+  LoopMode loop_mode_{LoopMode::kAuto};
+
+  double mpc_desired_frequency_{100.0};
+  double mrt_desired_frequency_{250.0};
+  double policy_time_tolerance_factor_{0.1};
+  double max_policy_wait_seconds_{0.0};  // 0 -> auto
+
+  // Derived
+  double mrt_dt_{0.004};
+  double policy_dt_{0.01};
+  size_t mpc_update_ratio_{1};
 
   // ===== OCS2 objects =====
   std::unique_ptr<MobileManipulatorInterface> interface_;
@@ -115,11 +144,11 @@ private:
 
   // Odom state
   mutable std::mutex odom_mutex_;
-  std::array<double, 3> base_pose_from_odom_{0.0, 0.0, 0.0}; // x, y, yaw
+  std::array<double, 3> base_pose_from_odom_{0.0, 0.0, 0.0};  // x, y, yaw
 
   // ===== ros2_control handles =====
-  std::vector<hardware_interface::LoanedStateInterface*> joint_position_states_;
-  std::vector<hardware_interface::LoanedCommandInterface*> joint_position_commands_;
+  std::vector<hardware_interface::LoanedStateInterface *> joint_position_states_;
+  std::vector<hardware_interface::LoanedCommandInterface *> joint_position_commands_;
 
   // ===== Dimensions / buffers =====
   int state_dim_{0};
@@ -128,20 +157,25 @@ private:
   SystemObservation initial_observation_;
   TargetTrajectories initial_target_;
 
-  // last OCS2 input (vel) used in obs.input
+  // last OCS2 input used in obs.input
   vector_t last_command_;
 
-  // For alpha semantics on base and arm
-  ocs2::vector_t last_base_cmd_{ocs2::vector_t::Zero(2)};  // [v, w]
-  std::vector<double> last_arm_pos_cmd_;        // size = arm_dim
+  // Alpha LPF state
+  vector_t last_base_cmd_{vector_t::Zero(2)};  // [v, w]
+  std::vector<double> last_arm_pos_cmd_;
 
-  // MPC reset / activation flags
+  // Loop state
   bool handles_initialized_{false};
   bool mpc_reset_done_{false};
 
-  // Dummy-like counters
   size_t loop_counter_{0};
-  size_t mpc_update_ratio_{1};
+  double virtual_time_{0.0};  // dummy-like time base
+
+  // Non-blocking wait state for synchronized mode
+  bool waiting_for_fresh_policy_{false};
+  rclcpp::Clock steady_clock_{RCL_STEADY_TIME};
+  rclcpp::Time wait_start_steady_{0, 0, RCL_STEADY_TIME};
+  double boundary_time_{0.0};
 };
 
 }  // namespace mpc_controller

@@ -46,6 +46,9 @@ def generate_launch_description():
         DeclareLaunchArgument("taskFile", default_value=task_default),
         DeclareLaunchArgument("urdfFile", default_value=urdf_default),
         DeclareLaunchArgument("libFolder", default_value="/tmp/ocs2_auto_generated/ridgeback_ur5"),
+        DeclareLaunchArgument("loopMode", default_value="auto"),  # auto / sync / rt
+        DeclareLaunchArgument("mpcFreq", default_value="100", description="MPC update frequency (should be integer)"),
+        DeclareLaunchArgument("mrtFreq", default_value="250", description="MRT update frequency (should be integer)"),
         DeclareLaunchArgument("controllersFile", default_value=controllers_default),
         DeclareLaunchArgument("globalFrame", default_value="odom"),
         DeclareLaunchArgument("baseCmdTopic", default_value="/cmd_vel"),
@@ -134,7 +137,7 @@ def generate_launch_description():
                 "odom_topic": LaunchConfiguration("odomTopic"),
                 "frame_id": LaunchConfiguration("globalFrame"),
                 "child_frame_id": "base_link",
-                "publish_rate": 250.0,
+                "publish_rate": ParameterValue(LaunchConfiguration("mrtFreq"), value_type=float),
                 "x0": LaunchConfiguration("baseX0"),
                 "y0": LaunchConfiguration("baseY0"),
                 "yaw0": LaunchConfiguration("baseYaw0"),

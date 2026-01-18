@@ -1,6 +1,6 @@
 controller_manager:
   ros__parameters:
-    update_rate: 250
+    update_rate: $(var mrtFreq)  # e.g. 250 [Hz]; should be integer
 
     joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
@@ -14,6 +14,12 @@ mpc_controller:
     taskFile: "$(var taskFile)"
     urdfFile: "$(var urdfFile)"
     libFolder: "$(var libFolder)"
+
+    loopMode: "$(var loopMode)"                 # auto / synchronized(sync) / realtime(rt)
+    mpcDesiredFrequency: $(var mpcFreq)         # e.g. 100 [Hz]
+    mrtDesiredFrequency: $(var mrtFreq)         # e.g. 250 [Hz]
+    policyTimeToleranceFactor: 0.1              # policy must start within this fraction of dt
+    maxPolicyWaitSeconds: 0.0                   # 0=auto (automatically provide ~2 MPC periods of safety net)
 
     # Frames / timing
     globalFrame: "$(var globalFrame)"
