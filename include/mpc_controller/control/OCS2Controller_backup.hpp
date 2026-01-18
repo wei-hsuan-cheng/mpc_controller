@@ -51,25 +51,6 @@ public:
 
   void applyCommandUsingNextState(const ocs2::vector_t& command, const ocs2::vector_t& x_next);
 
-  /**
-   * Apply MPC rollout results with a first-order low-pass filter controlled by
-   * commandSmoothingAlpha:
-   *   - alpha = 0   : hold (base cmd_vel = 0, arm holds current joint positions)
-   *   - 0 < alpha < 1 : low-pass filter the rollout
-   *   - alpha = 1   : no filtering, execute rollout
-   *
-   * NOTE: Base is velocity-controlled (cmd_vel). Arm is position-controlled in hardware,
-   * but the OCS2 model typically uses joint velocities as inputs. We therefore:
-   *   - filter base twist directly
-   *   - filter arm joint *positions* (derived from x_next)
-   *   - back-compute an equivalent joint-velocity input for observation.input
-   */
-  void applyFilteredRolloutCommand(
-    const ocs2::vector_t& u_rollout,
-    const ocs2::vector_t& x_next,
-    const ocs2::vector_t& x_meas,
-    double dt);
-
   controller_interface::return_type update(
     const rclcpp::Time & time, const rclcpp::Duration & period) override;
 
@@ -102,10 +83,6 @@ private:
   rclcpp::Node::SharedPtr mrt_node_;
 
   ocs2::vector_t last_command_;
-  // LPF state (base twist)
-  ocs2::vector_t last_base_cmd_;
-  // LPF state (arm joint position command)
-  ocs2::vector_t last_arm_pos_cmd_;
   ocs2::SystemObservation initial_observation_;
   ocs2::TargetTrajectories initial_target_;
 
