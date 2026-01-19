@@ -38,7 +38,6 @@ ros2 launch mpc_controller ridgeback_ur5.launch.py \
   solver:=ddp \
   commandType:=marker \
   use_fake_hardware:=true
-
 # sovler:=ddp, sqp
 # commandType:=marker, twist, trajectory
 # use_fake_hardware:=true, false
