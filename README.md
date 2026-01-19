@@ -33,22 +33,15 @@ colcon build --symlink-install \
 ```
 
 ```bash
-ros2 launch mpc_controller mobile_manipulator_mpc.launch.py use_fake_hardware:=true commandType:=marker
-ros2 launch mpc_controller mobile_manipulator_mpc.launch.py use_fake_hardware:=true commandType:=twist
-ros2 launch mpc_controller mobile_manipulator_mpc.launch.py use_fake_hardware:=true commandType:=trajectory
+# E.g., Ridgeback + UR5 mobile manipulator
+ros2 launch mpc_controller ridgeback_ur5.launch.py \
+  solver:=ddp \
+  commandType:=marker \
+  use_fake_hardware:=true
 
-# Ridgeback + UR5 mobile manipulator
-ros2 launch mpc_controller ridgeback_ur5_mpc.launch.py commandType:=marker
-```
-
-## Ridgeback UR5 (marker)
-
-This preset mirrors the upstream OCS2 example `manipulator_ridgeback_ur5_marker.launch.py`, but runs the MRT side inside the `ros2_control` controller and uses a small fake odom publisher by default.
-
-```bash
-ros2 launch mpc_controller ridgeback_ur5_marker.launch.py
-# optionally disable RViz or the fake odom publisher
-ros2 launch mpc_controller ridgeback_ur5_marker.launch.py rviz:=false use_fake_odom:=false
+# sovler:=ddp, sqp
+# commandType:=marker, twist, trajectory
+# use_fake_hardware:=true, false
 ```
 
 Key arguments:
