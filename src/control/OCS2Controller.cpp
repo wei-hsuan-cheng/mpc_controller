@@ -374,13 +374,24 @@ bool OCS2Controller::policyIsFreshForTime(double desired_time, double policy_dt)
   (void)mrt_->updatePolicy();
   if (!mrt_->initialPolicyReceived()) return false;
 
-  const auto & policy = mrt_->getPolicy();
+  const auto& policy = mrt_->getPolicy();
   if (policy.timeTrajectory_.empty()) return false;
 
-  const double t0 = policy.timeTrajectory_.front();
+  const double t0  = policy.timeTrajectory_.front();
   const double tol = policy_time_tolerance_factor_ * policy_dt;
-  return std::abs(desired_time - t0) < tol;
+  const double diff = std::abs(desired_time - t0);
+
+  const bool ok = (diff < tol);
+  if (!ok) {
+    RCLCPP_WARN_THROTTLE(
+      get_node()->get_logger(), *get_node()->get_clock(), 1000,
+      "[fresh-check FAILED] desired=%.3f t0=%.3f dt=%.3f tol=%.3f |diff|=%.3f",
+      desired_time, t0, policy_dt, tol, diff);
+  }
+
+  return ok;
 }
+
 
 controller_interface::return_type OCS2Controller::update(const rclcpp::Time &, const rclcpp::Duration &)
 {
