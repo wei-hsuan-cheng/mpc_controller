@@ -1,6 +1,6 @@
 # ROS 2 controllers
 control:
-  future_time_offset: 0.02 # 0.02, 0.05
+  future_time_offset: 0.0 # 0.0 0.02, 0.05
   command_smoothing_alpha: 1.0 # 1.0, 0.8
 
 # Command (target) for MPC
