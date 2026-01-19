@@ -10,6 +10,8 @@ controller_manager:
 
 mpc_controller:
   ros__parameters:
+    update_rate: $(var mrtFreq) # e.g. 250 [Hz]; should be integer
+
     # OCS2 inputs (substituted by launch when loaded with allow_substs=True)
     taskFile: "$(var taskFile)"
     urdfFile: "$(var urdfFile)"
@@ -18,7 +20,7 @@ mpc_controller:
     loopMode: "$(var loopMode)"                 # auto / synchronized(sync) / realtime(rt)
     mpcDesiredFrequency: $(var mpcFreq)         # e.g. 100 [Hz]
     mrtDesiredFrequency: $(var mrtFreq)         # e.g. 250 [Hz]
-    policyTimeToleranceFactor: 0.1              # policy must start within this fraction of dt
+    policyTimeToleranceFactor: 0.1              # 0.1 (stricter), 0.4, policy must start within this fraction of dt
     maxPolicyWaitSeconds: 0.0                   # 0=auto (automatically provide ~2 MPC periods of safety net)
 
     # Frames / timing
