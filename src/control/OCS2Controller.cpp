@@ -385,8 +385,10 @@ bool OCS2Controller::policyIsFreshForTime(double desired_time, double policy_dt)
   if (!ok) {
     RCLCPP_WARN_THROTTLE(
       get_node()->get_logger(), *get_node()->get_clock(), 1000,
-      "[fresh-check FAILED] desired=%.3f t0=%.3f dt=%.3f tol=%.3f |diff|=%.3f",
-      desired_time, t0, policy_dt, tol, diff);
+      "[policy sync lag] Policy start time is not aligned with requested time. "
+      "This can happen due to MPC compute/transport delay; controller will continue. "
+      "desired=%.3f, policy_t0=%.3f, |diff|=%.3f > tol=%.3f (dt=%.3f, factor=%.3f)",
+      desired_time, t0, diff, tol, policy_dt, policy_time_tolerance_factor_);
   }
 
   return ok;
