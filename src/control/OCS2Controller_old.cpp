@@ -1,128 +1,240 @@
 #include "mpc_controller/control/OCS2Controller.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
+
 #include <Eigen/Geometry>
-#include <pinocchio/algorithm/kinematics.hpp>
 #include <pinocchio/algorithm/frames.hpp>
-#include <rclcpp/logging.hpp>
+#include <pinocchio/algorithm/kinematics.hpp>
 
 #include <pluginlib/class_list_macros.hpp>
 
 namespace mpc_controller
 {
 
-using ocs2::vector_t;
 using ocs2::SystemObservation;
 using ocs2::TargetTrajectories;
+using ocs2::vector_t;
 using ocs2::mobile_manipulator::MobileManipulatorInterface;
+
+// ===== Param helpers =====
+
+void OCS2Controller::declareIfUndeclaredNotSet(
+  const rclcpp_lifecycle::LifecycleNode::SharedPtr& node, const std::string& name)
+{
+  if (!node->has_parameter(name)) {
+    // Declare as NOT_SET so overrides can be int/double/string safely.
+    node->declare_parameter(name, rclcpp::ParameterValue{});
+  }
+}
+
+double OCS2Controller::getParamAsDouble(
+  const rclcpp_lifecycle::LifecycleNode::SharedPtr& node,
+  const std::string& name,
+  double default_value)
+{
+  declareIfUndeclaredNotSet(node, name);
+
+  rclcpp::Parameter p;
+  if (!node->get_parameter(name, p)) {
+    return default_value;
+  }
+
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_NOT_SET) {
+    return default_value;
+  }
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE) {
+    return p.as_double();
+  }
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) {
+    return static_cast<double>(p.as_int());
+  }
+  throw std::runtime_error("Parameter '" + name + "' must be int or double.");
+}
+
+std::string OCS2Controller::getParamAsString(
+  const rclcpp_lifecycle::LifecycleNode::SharedPtr& node,
+  const std::string& name,
+  const std::string& default_value)
+{
+  declareIfUndeclaredNotSet(node, name);
+
+  rclcpp::Parameter p;
+  if (!node->get_parameter(name, p)) return default_value;
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_NOT_SET) return default_value;
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_STRING) return p.as_string();
+  throw std::runtime_error("Parameter '" + name + "' must be string.");
+}
+
+bool OCS2Controller::getParamAsBool(
+  const rclcpp_lifecycle::LifecycleNode::SharedPtr& node,
+  const std::string& name,
+  bool default_value)
+{
+  declareIfUndeclaredNotSet(node, name);
+
+  rclcpp::Parameter p;
+  if (!node->get_parameter(name, p)) return default_value;
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_NOT_SET) return default_value;
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_BOOL) return p.as_bool();
+  throw std::runtime_error("Parameter '" + name + "' must be bool.");
+}
+
+std::vector<std::string> OCS2Controller::getParamAsStringArray(
+  const rclcpp_lifecycle::LifecycleNode::SharedPtr& node,
+  const std::string& name,
+  const std::vector<std::string>& default_value)
+{
+  declareIfUndeclaredNotSet(node, name);
+
+  rclcpp::Parameter p;
+  if (!node->get_parameter(name, p)) return default_value;
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_NOT_SET) return default_value;
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_STRING_ARRAY) return p.as_string_array();
+  throw std::runtime_error("Parameter '" + name + "' must be string array.");
+}
+
+// ===== Loop helpers =====
 
 controller_interface::CallbackReturn OCS2Controller::on_init()
 {
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
-controller_interface::CallbackReturn OCS2Controller::on_configure(
-  const rclcpp_lifecycle::State &)
+OCS2Controller::LoopMode OCS2Controller::parseLoopMode(const std::string & s)
+{
+  if (s == "sync" || s == "synchronized") return LoopMode::kSynchronized;
+  if (s == "realtime" || s == "rt") return LoopMode::kRealtime;
+  return LoopMode::kAuto;
+}
+
+void OCS2Controller::resolveLoopMode()
+{
+  if (loop_mode_ == LoopMode::kAuto) {
+    loop_mode_ = (mpc_desired_frequency_ > 0.0) ? LoopMode::kSynchronized : LoopMode::kRealtime;
+  }
+}
+
+controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_lifecycle::State &)
 {
   auto node = get_node();
 
-  // Control mode: true -> send JointJog to MoveIt Servo; false -> write velocities directly to hardware.
-  if (node->has_parameter("use_moveit_servo")) {
-    use_moveit_servo_ = node->get_parameter("use_moveit_servo").as_bool();
-  } else {
-    use_moveit_servo_ = node->declare_parameter<bool>("use_moveit_servo", false);
-  }
+  // --- required paths ---
+  task_file_   = getParamAsString(node, "taskFile", "");
+  lib_folder_  = getParamAsString(node, "libFolder", "");
+  urdf_file_   = getParamAsString(node, "urdfFile", "");
 
-  // Read parameters that are provided via ros2_control YAML / launch arguments
-  task_file_ = node->get_parameter("taskFile").as_string();
-  lib_folder_ = node->get_parameter("libFolder").as_string();
-  urdf_file_ = node->get_parameter("urdfFile").as_string();
-  future_time_offset_ = node->get_parameter("futureTimeOffset").as_double();
-  command_smoothing_alpha_ = node->get_parameter("commandSmoothingAlpha").as_double();
-  global_frame_ = node->get_parameter("globalFrame").as_string();
+  global_frame_ = getParamAsString(node, "globalFrame", "world");
 
-  arm_joint_names_ = node->get_parameter("arm_joints").as_string_array();
+  // --- topics ---
+  base_cmd_topic_  = getParamAsString(node, "base_cmd_topic", base_cmd_topic_);
+  odom_topic_      = getParamAsString(node, "odom_topic", odom_topic_);
+  joint_jog_topic_ = getParamAsString(node, "joint_jog_topic", joint_jog_topic_);
 
-  // Optional topics, fall back to compiled-in defaults if not set
-  if (node->has_parameter("base_cmd_topic")) {
-    base_cmd_topic_ = node->get_parameter("base_cmd_topic").as_string();
-  }
-  if (node->has_parameter("odom_topic")) {
-    odom_topic_ = node->get_parameter("odom_topic").as_string();
-  }
-  if (node->has_parameter("joint_jog_topic")) {
-    joint_jog_topic_ = node->get_parameter("joint_jog_topic").as_string();
-  }
+  // --- numeric (robust int/double) ---
+  future_time_offset_       = getParamAsDouble(node, "futureTimeOffset", 0.0);
+  command_smoothing_alpha_  = getParamAsDouble(node, "commandSmoothingAlpha", 1.0);
+
+  mpc_desired_frequency_    = getParamAsDouble(node, "mpcDesiredFrequency", 100.0);
+  mrt_desired_frequency_    = getParamAsDouble(node, "mrtDesiredFrequency", 250.0);
+
+  policy_time_tolerance_factor_ = getParamAsDouble(node, "policyTimeToleranceFactor", 0.1);
+  max_policy_wait_seconds_      = getParamAsDouble(node, "maxPolicyWaitSeconds", 0.0);
+
+  // --- bool ---
+  use_moveit_servo_ = getParamAsBool(node, "use_moveit_servo", false);
+
+  // --- joints ---
+  arm_joint_names_ = getParamAsStringArray(node, "arm_joints", {});
+
+  // --- loop mode ---
+  loop_mode_str_ = getParamAsString(node, "loopMode", "auto");
+  loop_mode_ = parseLoopMode(loop_mode_str_);
 
   command_smoothing_alpha_ = std::clamp(command_smoothing_alpha_, 0.0, 1.0);
+  policy_time_tolerance_factor_ = std::clamp(policy_time_tolerance_factor_, 0.0, 1.0);
 
-  // Log configuration for easier debugging.
-  std::string arm_joints_str;
-  for (size_t i = 0; i < arm_joint_names_.size(); ++i) {
-    arm_joints_str += arm_joint_names_[i];
-    if (i + 1 < arm_joint_names_.size()) {
-      arm_joints_str += ", ";
-    }
+  // NOTE: dummy convention: mpcDesiredFrequency < 0 => realtime
+  mrt_desired_frequency_ = std::max(1e-3, mrt_desired_frequency_);
+  if (mpc_desired_frequency_ > 0.0) {
+    mpc_desired_frequency_ = std::max(1e-3, mpc_desired_frequency_);
   }
+
+  mrt_dt_ = 1.0 / std::max(1.0, mrt_desired_frequency_);
+  policy_dt_ = (mpc_desired_frequency_ > 0.0)
+    ? (1.0 / std::max(1.0, std::abs(mpc_desired_frequency_)))
+    : mrt_dt_;
+
+  if (mpc_desired_frequency_ > 0.0) {
+    mpc_update_ratio_ =
+      std::max<size_t>(static_cast<size_t>(mrt_desired_frequency_ / mpc_desired_frequency_), 1);
+  } else {
+    mpc_update_ratio_ = 1;
+  }
+
+  if (max_policy_wait_seconds_ <= 0.0) {
+    max_policy_wait_seconds_ = (mpc_desired_frequency_ > 0.0) ? (2.0 * policy_dt_) : 0.5;
+  }
+
+  resolveLoopMode();
 
   RCLCPP_INFO(
     node->get_logger(),
-    "[OCS2Controller] configuration:\n"
-    "  taskFile: %s\n"
-    "  libFolder: %s\n"
-    "  urdfFile: %s\n"
-    "  futureTimeOffset: %.6f\n"
-    "  commandSmoothingAlpha (clamped): %.6f\n"
-    "  globalFrame: %s\n"
-    "  use_moveit_servo: %s\n"
-    "  arm_joints: [%s]\n"
-    "  base_cmd_topic: %s\n"
-    "  odom_topic: %s\n"
-    "  joint_jog_topic: %s",
-    task_file_.c_str(),
-    lib_folder_.c_str(),
-    urdf_file_.c_str(),
+    "[OCS2Controller] loop settings:\n"
+    "  loopMode: %s\n"
+    "  mpcDesiredFrequency: %.3f\n"
+    "  mrtDesiredFrequency: %.3f\n"
+    "  mrtDt: %.6f\n"
+    "  policyDt: %.6f\n"
+    "  mpcUpdateRatio: %zu\n"
+    "  policyTimeToleranceFactor: %.3f\n"
+    "  maxPolicyWaitSeconds: %.3f\n"
+    "  futureTimeOffset: %.3f\n"
+    "  commandSmoothingAlpha: %.3f",
+    loop_mode_str_.c_str(),
+    mpc_desired_frequency_,
+    mrt_desired_frequency_,
+    mrt_dt_,
+    policy_dt_,
+    mpc_update_ratio_,
+    policy_time_tolerance_factor_,
+    max_policy_wait_seconds_,
     future_time_offset_,
-    command_smoothing_alpha_,
-    global_frame_.c_str(),
-    use_moveit_servo_ ? "true" : "false",
-    arm_joints_str.c_str(),
-    base_cmd_topic_.c_str(),
-    odom_topic_.c_str(),
-    joint_jog_topic_.c_str());
+    command_smoothing_alpha_);
 
   if (task_file_.empty() || lib_folder_.empty() || urdf_file_.empty()) {
-    RCLCPP_ERROR(
-      node->get_logger(),
+    RCLCPP_ERROR(node->get_logger(),
       "[OCS2Controller] parameters 'taskFile', 'libFolder' or 'urdfFile' are empty.");
     return controller_interface::CallbackReturn::ERROR;
   }
 
+  // --- interface ---
   try {
-    interface_ = std::make_unique<MobileManipulatorInterface>(
-      task_file_, lib_folder_, urdf_file_);
+    interface_ = std::make_unique<MobileManipulatorInterface>(task_file_, lib_folder_, urdf_file_);
   } catch (const std::exception & e) {
     RCLCPP_ERROR(node->get_logger(), "Failed to create MobileManipulatorInterface: %s", e.what());
     return controller_interface::CallbackReturn::ERROR;
   }
 
-  // Visualization helper
+  // --- visualization (optional) ---
   try {
     visualization_node_ = std::make_shared<rclcpp::Node>(
       node->get_name() + std::string("_visualizer"), node->get_namespace());
     visualization_ = std::make_unique<MobileManipulatorVisualization>(
       visualization_node_, *interface_, task_file_, urdf_file_, global_frame_);
   } catch (const std::exception & e) {
-    RCLCPP_WARN(node->get_logger(), "[OCS2Controller]: failed to init visualization: %s", e.what());
+    RCLCPP_WARN(node->get_logger(), "[OCS2Controller] visualization init failed: %s", e.what());
     visualization_.reset();
     visualization_node_.reset();
   }
 
+  // --- MRT ---
   try {
     mrt_ = std::make_unique<ocs2::MRT_ROS_Interface>("mobile_manipulator");
     mrt_->initRollout(&interface_->getRollout());
@@ -142,29 +254,18 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(
   state_dim_ = info.stateDim;
   input_dim_ = info.inputDim;
 
-  if (arm_joint_names_.size() != static_cast<size_t>(info.armDim)) {
-    RCLCPP_WARN(
-      node->get_logger(),
-      "Configured %zu arm joints but model expects %zu. Using provided list.",
-      arm_joint_names_.size(), static_cast<size_t>(info.armDim));
-  }
-
-  // Init observation / command buffers
   initial_observation_.state = vector_t::Zero(state_dim_);
   initial_observation_.input = vector_t::Zero(input_dim_);
   initial_observation_.time = 0.0;
   initial_observation_.mode = 0;
   initial_target_ = TargetTrajectories();
+
   last_command_ = vector_t::Zero(input_dim_);
   last_base_cmd_ = vector_t::Zero(2);
-  last_arm_pos_cmd_ = vector_t::Zero(static_cast<Eigen::Index>(arm_joint_names_.size()));
+  last_arm_pos_cmd_.assign(static_cast<size_t>(info.armDim), 0.0);
 
-  // Base command and odom interfaces
-  base_cmd_pub_ =
-    node->create_publisher<geometry_msgs::msg::Twist>(base_cmd_topic_, rclcpp::SystemDefaultsQoS());
-
-  joint_jog_pub_ =
-    node->create_publisher<control_msgs::msg::JointJog>(joint_jog_topic_, rclcpp::SystemDefaultsQoS());
+  base_cmd_pub_ = node->create_publisher<geometry_msgs::msg::Twist>(base_cmd_topic_, rclcpp::SystemDefaultsQoS());
+  joint_jog_pub_ = node->create_publisher<control_msgs::msg::JointJog>(joint_jog_topic_, rclcpp::SystemDefaultsQoS());
 
   odom_sub_ = node->create_subscription<nav_msgs::msg::Odometry>(
     odom_topic_, rclcpp::SystemDefaultsQoS(),
@@ -178,60 +279,67 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(
       base_pose_from_odom_[2] = std::atan2(siny_cosp, cosy_cosp);
     });
 
+  // loop reset
   mpc_reset_done_ = false;
   handles_initialized_ = false;
+  loop_counter_ = 0;
+  virtual_time_ = 0.0;
+  waiting_for_fresh_policy_ = false;
+  boundary_time_ = 0.0;
 
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
-controller_interface::CallbackReturn OCS2Controller::on_activate(
-  const rclcpp_lifecycle::State &)
+controller_interface::CallbackReturn OCS2Controller::on_activate(const rclcpp_lifecycle::State &)
 {
   if (!initializeHandles()) {
     RCLCPP_ERROR(get_node()->get_logger(), "[OCS2Controller] failed to initialize state handles.");
     return controller_interface::CallbackReturn::ERROR;
   }
 
-  const auto now = get_node()->now();
-  initial_observation_ = buildObservation(now);
+  loop_counter_ = 0;
+  virtual_time_ = 0.0;
+  waiting_for_fresh_policy_ = false;
+  boundary_time_ = 0.0;
+
+  initial_observation_ = buildObservation(virtual_time_);
   initial_target_ = computeInitialTarget(initial_observation_.state, initial_observation_.time);
 
-  // Reset command memory so alpha=0 really holds.
-  last_command_ = vector_t::Zero(input_dim_);
-  last_base_cmd_ = vector_t::Zero(2);
-  // Initialize arm LPF memory to current measured joints (hold...)
-  {
-    const Eigen::Index arm_state_offset = 3;
-    const Eigen::Index arm_dim = static_cast<Eigen::Index>(arm_joint_names_.size());
-    if (arm_dim > 0) {
-      last_arm_pos_cmd_.resize(arm_dim);
-      for (Eigen::Index i = 0; i < arm_dim; ++i) {
-        const Eigen::Index si = arm_state_offset + i;
-        last_arm_pos_cmd_(i) = (si < initial_observation_.state.size()) ? initial_observation_.state(si) : 0.0;
-      }
+  // init LPF memory to current
+  const size_t arm_dim = arm_joint_names_.size();
+  last_arm_pos_cmd_.resize(arm_dim, 0.0);
+  for (size_t i = 0; i < arm_dim; ++i) {
+    const Eigen::Index si = 3 + static_cast<Eigen::Index>(i);
+    if (si < initial_observation_.state.size()) {
+      last_arm_pos_cmd_[i] = initial_observation_.state(si);
     }
   }
+  last_base_cmd_.setZero();
+  last_command_.setZero();
 
-  // Actively hold once on activation: base zero, arm holds current posture.
-  {
-    vector_t zero_u = vector_t::Zero(input_dim_);
-    applyCommandUsingNextState(zero_u, initial_observation_.state);
-  }
+  applyHoldCommand(initial_observation_);
 
   if (mrt_) {
     mrt_->reset();
+    mpc_reset_done_ = false;
     resetMpc();
+    mrt_->setCurrentObservation(initial_observation_);
   }
 
   handles_initialized_ = true;
+
+  RCLCPP_INFO(get_node()->get_logger(),
+    "[OCS2Controller] activated: dummy-like time base (dt=%.6f), non-blocking policy sync.",
+    mrt_dt_);
+
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
-controller_interface::CallbackReturn OCS2Controller::on_deactivate(
-  const rclcpp_lifecycle::State &)
+controller_interface::CallbackReturn OCS2Controller::on_deactivate(const rclcpp_lifecycle::State &)
 {
   handles_initialized_ = false;
   joint_position_states_.clear();
+  joint_position_commands_.clear();
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
@@ -239,10 +347,7 @@ controller_interface::InterfaceConfiguration OCS2Controller::command_interface_c
 {
   controller_interface::InterfaceConfiguration config;
   config.type = controller_interface::interface_configuration_type::INDIVIDUAL;
-  // Only claim hardware position command interfaces when we are in direct
-  // hardware-control mode. When using MoveIt Servo (use_moveit_servo_ == true),
-  // the ServoController owns these interfaces and we publish JointJog commands
-  // instead, so we must not claim them here to avoid resource conflicts.
+
   if (!use_moveit_servo_) {
     for (const auto & joint : arm_joint_names_) {
       config.names.push_back(joint + std::string("/") + hardware_interface::HW_IF_POSITION);
@@ -255,250 +360,247 @@ controller_interface::InterfaceConfiguration OCS2Controller::state_interface_con
 {
   controller_interface::InterfaceConfiguration config;
   config.type = controller_interface::interface_configuration_type::INDIVIDUAL;
+
   for (const auto & joint : arm_joint_names_) {
     config.names.push_back(joint + std::string("/") + hardware_interface::HW_IF_POSITION);
   }
   return config;
 }
 
-void OCS2Controller::applyCommandUsingNextState(const vector_t& command, const vector_t& x_next)
+bool OCS2Controller::policyIsFreshForTime(double desired_time, double policy_dt)
 {
-  if (!base_cmd_pub_) {
-    return;
+  if (!mrt_) return false;
+
+  (void)mrt_->updatePolicy();
+  if (!mrt_->initialPolicyReceived()) return false;
+
+  const auto& policy = mrt_->getPolicy();
+  if (policy.timeTrajectory_.empty()) return false;
+
+  const double t0  = policy.timeTrajectory_.front();
+  const double tol = policy_time_tolerance_factor_ * policy_dt;
+  const double diff = std::abs(desired_time - t0);
+
+  const bool ok = (diff < tol);
+  if (!ok) {
+    RCLCPP_WARN_THROTTLE(
+      get_node()->get_logger(), *get_node()->get_clock(), 1000,
+      "[policy sync lag] Policy start time is not aligned with requested time. "
+      "This can happen due to MPC compute/transport delay; controller will continue. "
+      "desired=%.3f, policy_t0=%.3f, |diff|=%.3f > tol=%.3f (dt=%.3f, factor=%.3f)",
+      desired_time, t0, diff, tol, policy_dt, policy_time_tolerance_factor_);
   }
 
-  const size_t arm_dim = arm_joint_names_.size();
-
-  // --- Base twist command (cmd_vel) ---
-  if (static_cast<size_t>(command.size()) >= 2) {
-    geometry_msgs::msg::Twist base_cmd;
-    base_cmd.linear.x  = command(0);
-    base_cmd.linear.y  = 0.0;
-    base_cmd.linear.z  = 0.0;
-    base_cmd.angular.x = 0.0;
-    base_cmd.angular.y = 0.0;
-    base_cmd.angular.z = command(1);
-    base_cmd_pub_->publish(base_cmd);
-  }
-
-  // --- Arm position commands (hardware supports position interface @ 250Hz) ---
-  if (joint_position_commands_.size() < arm_dim || arm_dim == 0) {
-    return;
-  }
-
-  // Assume wheel-based state layout: [x, y, yaw, q0, q1, ...]
-  const Eigen::Index arm_state_offset = 3;
-
-  for (size_t idx = 0; idx < arm_dim; ++idx) {
-    auto* cmd = joint_position_commands_[idx];
-    if (!cmd) {
-      continue;
-    }
-
-    const Eigen::Index si = arm_state_offset + static_cast<Eigen::Index>(idx);
-    if (si >= x_next.size()) {
-      continue;
-    }
-
-    // Set next-step desired joint position from rollout result
-    cmd->set_value(x_next(si));
-  }
+  return ok;
 }
 
-void OCS2Controller::applyFilteredRolloutCommand(
-  const vector_t& u_rollout, const vector_t& x_next, const vector_t& x_meas, double dt)
-{
-  const Eigen::Index arm_offset = 3;
-  const Eigen::Index arm_dim = static_cast<Eigen::Index>(arm_joint_names_.size());
 
-  // Safety: dt needed for converting position cmd -> equivalent velocity for obs.input.
-  if (dt <= 0.0) {
-    return;
-  }
-
-  // --- Base command (2 DoF) ---
-  vector_t base_u = vector_t::Zero(2);
-  if (u_rollout.size() >= 2) {
-    base_u(0) = u_rollout(0);
-    base_u(1) = u_rollout(1);
-  }
-
-  vector_t base_u_cmd = vector_t::Zero(2);
-
-  // --- Arm position command ---
-  vector_t q_meas = vector_t::Zero(arm_dim);
-  for (Eigen::Index i = 0; i < arm_dim; ++i) {
-    const Eigen::Index si = arm_offset + i;
-    if (si < x_meas.size()) {
-      q_meas(i) = x_meas(si);
-    }
-  }
-
-  vector_t q_rollout = q_meas;
-  for (Eigen::Index i = 0; i < arm_dim; ++i) {
-    const Eigen::Index si = arm_offset + i;
-    if (si < x_next.size()) {
-      q_rollout(i) = x_next(si);
-    }
-  }
-
-  // Initialize LPF memories if sizes differ (e.g., on first cycle)
-  if (last_base_cmd_.size() != 2) {
-    last_base_cmd_ = vector_t::Zero(2);
-  }
-  if (last_arm_pos_cmd_.size() != arm_dim) {
-    last_arm_pos_cmd_ = q_meas;
-  }
-
-  vector_t q_cmd = q_meas;
-
-  if (command_smoothing_alpha_ <= 0.0) {
-    // HOLD
-    base_u_cmd.setZero();
-    last_base_cmd_.setZero();
-    q_cmd = q_meas;
-    last_arm_pos_cmd_ = q_meas;
-  } else if (command_smoothing_alpha_ >= 1.0) {
-    // NO FILTER
-    base_u_cmd = base_u;
-    q_cmd = q_rollout;
-    last_base_cmd_ = base_u_cmd;
-    last_arm_pos_cmd_ = q_cmd;
-  } else {
-    // LPF
-    base_u_cmd = command_smoothing_alpha_ * base_u + (1.0 - command_smoothing_alpha_) * last_base_cmd_;
-    q_cmd = command_smoothing_alpha_ * q_rollout + (1.0 - command_smoothing_alpha_) * last_arm_pos_cmd_;
-    last_base_cmd_ = base_u_cmd;
-    last_arm_pos_cmd_ = q_cmd;
-  }
-
-  // Build a commanded "next state" that encodes the filtered joint position command.
-  vector_t x_cmd = x_meas;
-  for (Eigen::Index i = 0; i < arm_dim; ++i) {
-    const Eigen::Index si = arm_offset + i;
-    if (si < x_cmd.size()) {
-      x_cmd(si) = q_cmd(i);
-    }
-  }
-
-  // Build an equivalent input vector for logging/observation.input consistency.
-  // Model input is [v_base, w_base, dq_arm...]. We approximate dq_arm from position command.
-  vector_t u_cmd = vector_t::Zero(input_dim_);
-  if (u_cmd.size() >= 2) {
-    u_cmd(0) = base_u_cmd(0);
-    u_cmd(1) = base_u_cmd(1);
-  }
-  for (Eigen::Index i = 0; i < arm_dim; ++i) {
-    const Eigen::Index ui = 2 + i;
-    if (ui < u_cmd.size()) {
-      u_cmd(ui) = (q_cmd(i) - q_meas(i)) / dt;
-    }
-  }
-  last_command_ = u_cmd;
-
-  // Apply to hardware: base velocity + arm position
-  applyCommandUsingNextState(u_cmd, x_cmd);
-}
-
-controller_interface::return_type OCS2Controller::update(
-  const rclcpp::Time & time, const rclcpp::Duration & period)
+controller_interface::return_type OCS2Controller::update(const rclcpp::Time &, const rclcpp::Duration &)
 {
   if (!handles_initialized_ || !mrt_) {
     return controller_interface::return_type::ERROR;
   }
 
-  const double dt = period.seconds();
-  if (dt <= 0.0) {
+  mrt_->spinMRT();
+
+  if (loop_mode_ == LoopMode::kRealtime) {
+    return runRealtimeLoopStep();
+  }
+  return runSynchronizedLoopStep();
+}
+
+controller_interface::return_type OCS2Controller::runRealtimeLoopStep()
+{
+  SystemObservation obs = buildObservation(virtual_time_);
+  mrt_->setCurrentObservation(obs);
+  (void)mrt_->updatePolicy();
+
+  if (!mrt_->initialPolicyReceived()) {
+    applyHoldCommand(obs);
     return controller_interface::return_type::OK;
   }
 
-  // 1) Build observation (current measured state)
-  auto observation = buildObservation(time);
+  const auto & policy = mrt_->getPolicy();
+  if (policy.timeTrajectory_.empty()) {
+    applyHoldCommand(obs);
+    return controller_interface::return_type::OK;
+  }
 
-  // 2) Feed observation to MRT and update policy (non-blocking / best effort)
-  mrt_->setCurrentObservation(observation);
-  mrt_->spinMRT();
-  const bool policy_updated = mrt_->updatePolicy();
-  const bool have_policy = mrt_->initialPolicyReceived();
+  const double t_req = obs.time + future_time_offset_;
+  if (t_req > policy.timeTrajectory_.back()) {
+    applyHoldCommand(obs);
+    return controller_interface::return_type::OK;
+  }
 
-  // Prepare buffers
   vector_t x_next(state_dim_);
   vector_t u_end(input_dim_);
   size_t mode_end = 0;
 
-  if (!have_policy) {
-    // No policy yet: HOLD current posture
-    vector_t zero_u = vector_t::Zero(input_dim_);
-    applyCommandUsingNextState(zero_u, observation.state);
+  mrt_->rolloutPolicy(t_req, obs.state, mrt_dt_, x_next, u_end, mode_end);
+  applyFilteredRolloutCommand(u_end, x_next);
+  last_command_ = u_end;
 
-    // Reset filter states so alpha=0 always holds deterministically.
-    last_command_.setZero();
-    last_base_cmd_.setZero();
-    if (static_cast<size_t>(last_arm_pos_cmd_.size()) == arm_joint_names_.size()) {
-      const Eigen::Index off = 3;
-      for (size_t i = 0; i < arm_joint_names_.size(); ++i) {
-        const Eigen::Index si = off + static_cast<Eigen::Index>(i);
-        if (si < observation.state.size()) {
-          last_arm_pos_cmd_(static_cast<Eigen::Index>(i)) = observation.state(si);
-        }
-      }
-    }
+  virtual_time_ += mrt_dt_;
+  ++loop_counter_;
 
-    if (visualization_ && policy_updated) {
-      visualization_->update(observation.state, mrt_->getPolicy(), mrt_->getCommand());
-    }
-    return controller_interface::return_type::OK;
-  }
-
-  // We have a policy:
-  {
-    // 3) Rollout ONE controller period with the same integrator as ocs2 dummy mrt sim (e.g., ODE45)
-    //    This makes base+arm propagation consistent (instead of ZOH + external fake odom).
-    mrt_->rolloutPolicy(
-      observation.time + future_time_offset_,   // compensate measurement/actuation delay if needed
-      observation.state,
-      dt,
-      x_next,
-      u_end,
-      mode_end
-    );
-
-    // 4) Apply filtered command:
-    //    - base: cmd_vel (velocity)
-    //    - arm: position interface, command blended joint positions
-    applyFilteredRolloutCommand(u_end, x_next, observation.state, dt);
-
-    if (visualization_ && policy_updated) {
-      visualization_->update(observation.state, mrt_->getPolicy(), mrt_->getCommand());
-    }
+  if (visualization_) {
+    visualization_->update(obs.state, policy, mrt_->getCommand());
   }
 
   return controller_interface::return_type::OK;
 }
 
-void OCS2Controller::resetMpc()
+controller_interface::return_type OCS2Controller::runSynchronizedLoopStep()
 {
-  if (mpc_reset_done_ || !mrt_) {
-    return;
-  }
+  const bool at_boundary = (loop_counter_ % mpc_update_ratio_ == 0);
+  SystemObservation obs = buildObservation(virtual_time_);
 
-  try {
-    const auto now = get_node()->now();
-    initial_observation_ = buildObservation(now);
-    initial_target_ =
-      computeInitialTarget(initial_observation_.state, initial_observation_.time);
+  (void)mrt_->updatePolicy();
 
-    // Reset smoothing memories to a clean "hold current" state.
-    last_command_.setZero();
-    last_base_cmd_ = vector_t::Zero(2);
-    last_arm_pos_cmd_ = vector_t::Zero(static_cast<Eigen::Index>(arm_joint_names_.size()));
-    for (Eigen::Index i = 0; i < static_cast<Eigen::Index>(arm_joint_names_.size()); ++i) {
-      const Eigen::Index si = 3 + i;
-      if (si < initial_observation_.state.size()) {
-        last_arm_pos_cmd_(i) = initial_observation_.state(si);
+  if (at_boundary) {
+    if (!waiting_for_fresh_policy_) {
+      waiting_for_fresh_policy_ = true;
+      wait_start_steady_ = steady_clock_.now();
+      boundary_time_ = obs.time;
+      mrt_->setCurrentObservation(obs);
+    }
+
+    const bool fresh = policyIsFreshForTime(boundary_time_, policy_dt_);
+    if (!fresh) {
+      applyHoldCommand(obs);
+      const double waited = (steady_clock_.now() - wait_start_steady_).seconds();
+      if (waited <= max_policy_wait_seconds_) {
+        return controller_interface::return_type::OK;
+      }
+      // timeout fallback: if policy exists, continue even if not fresh
+      if (!mrt_->initialPolicyReceived()) {
+        return controller_interface::return_type::OK;
       }
     }
 
+    waiting_for_fresh_policy_ = false;
+  }
+
+  if (!mrt_->initialPolicyReceived()) {
+    applyHoldCommand(obs);
+    return controller_interface::return_type::OK;
+  }
+
+  const auto & policy = mrt_->getPolicy();
+  if (policy.timeTrajectory_.empty()) {
+    applyHoldCommand(obs);
+    return controller_interface::return_type::OK;
+  }
+
+  const double t_req = obs.time + future_time_offset_;
+  if (t_req > policy.timeTrajectory_.back()) {
+    applyHoldCommand(obs);
+    return controller_interface::return_type::OK;
+  }
+
+  vector_t x_next(state_dim_);
+  vector_t u_end(input_dim_);
+  size_t mode_end = 0;
+
+  mrt_->rolloutPolicy(t_req, obs.state, mrt_dt_, x_next, u_end, mode_end);
+  applyFilteredRolloutCommand(u_end, x_next);
+  last_command_ = u_end;
+
+  SystemObservation next_obs;
+  next_obs.time  = obs.time + mrt_dt_;
+  next_obs.state = x_next;
+  next_obs.input = u_end;
+  next_obs.mode  = static_cast<int>(mode_end);
+
+  const bool next_is_boundary = ((loop_counter_ + 1) % mpc_update_ratio_ == 0);
+  if (next_is_boundary) {
+    mrt_->setCurrentObservation(next_obs);
+  }
+
+  virtual_time_ += mrt_dt_;
+  ++loop_counter_;
+
+  if (visualization_) {
+    visualization_->update(obs.state, policy, mrt_->getCommand());
+  }
+
+  return controller_interface::return_type::OK;
+}
+
+void OCS2Controller::applyHoldCommand(const SystemObservation & observation)
+{
+  if (base_cmd_pub_) {
+    geometry_msgs::msg::Twist cmd;
+    cmd.linear.x = 0.0;
+    cmd.angular.z = 0.0;
+    base_cmd_pub_->publish(cmd);
+  }
+  last_base_cmd_.setZero();
+
+  const size_t arm_dim = arm_joint_names_.size();
+  if (!use_moveit_servo_ && joint_position_commands_.size() >= arm_dim) {
+    for (size_t i = 0; i < arm_dim; ++i) {
+      const Eigen::Index si = 3 + static_cast<Eigen::Index>(i);
+      if (si < observation.state.size()) {
+        joint_position_commands_[i]->set_value(observation.state(si));
+        if (i < last_arm_pos_cmd_.size()) last_arm_pos_cmd_[i] = observation.state(si);
+      }
+    }
+  }
+
+  if (last_command_.size() == input_dim_) last_command_.setZero();
+}
+
+void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const vector_t & x_next)
+{
+  const double a = command_smoothing_alpha_;
+
+  // base LPF (vel)
+  vector_t u_base = vector_t::Zero(2);
+  if (u_end.size() >= 2) {
+    u_base(0) = u_end(0);
+    u_base(1) = u_end(1);
+  }
+
+  const vector_t blended_base = a * u_base + (1.0 - a) * last_base_cmd_;
+  last_base_cmd_ = blended_base;
+
+  if (base_cmd_pub_) {
+    geometry_msgs::msg::Twist cmd;
+    cmd.linear.x = blended_base(0);
+    cmd.angular.z = blended_base(1);
+    base_cmd_pub_->publish(cmd);
+  }
+
+  // arm LPF (pos)
+  const size_t arm_dim = arm_joint_names_.size();
+  if (arm_dim == 0) return;
+
+  if (!use_moveit_servo_) {
+    if (joint_position_commands_.size() < arm_dim) return;
+    if (last_arm_pos_cmd_.size() != arm_dim) last_arm_pos_cmd_.assign(arm_dim, 0.0);
+
+    for (size_t i = 0; i < arm_dim; ++i) {
+      const Eigen::Index si = 3 + static_cast<Eigen::Index>(i);
+      if (si >= x_next.size()) continue;
+
+      const double q_next = x_next(si);
+      const double q_cmd = a * q_next + (1.0 - a) * last_arm_pos_cmd_[i];
+      last_arm_pos_cmd_[i] = q_cmd;
+      joint_position_commands_[i]->set_value(q_cmd);
+    }
+  } else {
+    // MoveIt Servo mode: keep your existing design (publish JointJog) if you want.
+  }
+}
+
+void OCS2Controller::resetMpc()
+{
+  if (mpc_reset_done_ || !mrt_) return;
+
+  try {
+    initial_observation_ = buildObservation(virtual_time_);
+    initial_target_ = computeInitialTarget(initial_observation_.state, initial_observation_.time);
     mrt_->resetMpcNode(initial_target_);
     mpc_reset_done_ = true;
     RCLCPP_INFO(get_node()->get_logger(), "[OCS2Controller] requested MPC reset.");
@@ -507,10 +609,10 @@ void OCS2Controller::resetMpc()
   }
 }
 
-SystemObservation OCS2Controller::buildObservation(const rclcpp::Time & time) const
+SystemObservation OCS2Controller::buildObservation(double time_sec) const
 {
   SystemObservation obs;
-  obs.time = time.seconds();
+  obs.time = time_sec;
   obs.state = vector_t::Zero(state_dim_);
   obs.input = last_command_;
   obs.mode = 0;
@@ -525,92 +627,19 @@ SystemObservation OCS2Controller::buildObservation(const rclcpp::Time & time) co
   }
 
   for (size_t idx = 0; idx < arm_joint_names_.size(); ++idx) {
-    const Eigen::Index state_index = static_cast<Eigen::Index>(3 + idx);
-    if (state_index < obs.state.size() && idx < joint_position_states_.size()) {
-      obs.state(state_index) = joint_position_states_[idx]->get_value();
+    const Eigen::Index si = static_cast<Eigen::Index>(3 + idx);
+    if (si < obs.state.size() && idx < joint_position_states_.size()) {
+      obs.state(si) = joint_position_states_[idx]->get_value();
     }
   }
 
   return obs;
 }
 
-void OCS2Controller::applyCommand(const vector_t & command, double dt)
-{
-  if (!base_cmd_pub_) {
-    return;
-  }
-
-  if (static_cast<size_t>(command.size()) < 2 + arm_joint_names_.size()) {
-    RCLCPP_WARN_THROTTLE(
-      get_node()->get_logger(), *get_node()->get_clock(), 5000,
-      "[OCS2Controller] command size %ld, expected at least %zu. Skipping.",
-      command.size(), 2 + arm_joint_names_.size());
-    return;
-  }
-
-  auto node = get_node();
-
-  // Base twist (cmd_vel)
-  geometry_msgs::msg::Twist base_cmd;
-  base_cmd.linear.x = command(0);
-  base_cmd.linear.y = 0.0;
-  base_cmd.linear.z = 0.0;
-  base_cmd.angular.x = 0.0;
-  base_cmd.angular.y = 0.0;
-  base_cmd.angular.z = command(1);
-  base_cmd_pub_->publish(base_cmd);
-
-  const size_t arm_dim = arm_joint_names_.size();
-
-  if (use_moveit_servo_) {
-    // Arm joint velocities via JointJog for MoveIt Servo
-    if (!joint_jog_pub_) {
-      return;
-    }
-
-    control_msgs::msg::JointJog jog;
-    jog.header.stamp = node->get_clock()->now();
-    jog.header.frame_id = "";
-
-    jog.joint_names.reserve(arm_dim);
-    jog.velocities.reserve(arm_dim);
-
-    for (size_t idx = 0; idx < arm_dim; ++idx) {
-      jog.joint_names.push_back(arm_joint_names_[idx]);
-      jog.velocities.push_back(command(2 + idx));
-    }
-    jog.duration = 0.0;
-
-    joint_jog_pub_->publish(jog);
-  } else {
-    // Directly write integrated positions to hardware position command interfaces.
-    // The OCS2 command vector encodes joint velocities; here we integrate them with
-    // the controller update period dt to obtain position commands.
-    if (joint_position_commands_.size() < arm_dim || joint_position_states_.size() < arm_dim) {
-      RCLCPP_WARN_THROTTLE(
-        get_node()->get_logger(), *get_node()->get_clock(), 5000,
-        "[OCS2Controller] missing position command handles for %zu joints.", arm_dim);
-      return;
-    }
-
-    for (size_t idx = 0; idx < arm_dim; ++idx) {
-      auto * state = joint_position_states_[idx];
-      auto * cmd = joint_position_commands_[idx];
-      if (!state || !cmd) {
-        continue;
-      }
-      const double q = state->get_value();
-      const double dq = command(2 + idx);  // rad/s from OCS2
-      const double q_next = q + dq * dt;
-      cmd->set_value(q_next);
-    }
-  }
-}
-
-TargetTrajectories OCS2Controller::computeInitialTarget(
-  const vector_t & state, double time) const
+TargetTrajectories OCS2Controller::computeInitialTarget(const vector_t & state, double time) const
 {
   vector_t init_target;
+
   const auto & pin_interface = interface_->getPinocchioInterface();
   const auto & model = pin_interface.getModel();
   auto data = pin_interface.getData();
@@ -619,8 +648,10 @@ TargetTrajectories OCS2Controller::computeInitialTarget(
   pinocchio::updateFramePlacements(model, data);
 
   const auto & info = interface_->getManipulatorModelInfo();
+
   if (interface_->dual_arm_) {
     init_target.resize(14);
+
     const auto left_id = model.getFrameId(info.eeFrame);
     const auto & left = data.oMf[left_id];
     Eigen::Quaterniond left_q(left.rotation());
@@ -634,6 +665,7 @@ TargetTrajectories OCS2Controller::computeInitialTarget(
     init_target.segment<4>(10) = right_q.coeffs();
   } else {
     init_target.resize(7);
+
     const auto ee_id = model.getFrameId(info.eeFrame);
     const auto & ee = data.oMf[ee_id];
     Eigen::Quaterniond quat(ee.rotation());
@@ -641,28 +673,21 @@ TargetTrajectories OCS2Controller::computeInitialTarget(
     init_target.tail<4>() = quat.coeffs();
   }
 
-  const vector_t zero_input =
-    vector_t::Zero(interface_->getManipulatorModelInfo().inputDim);
+  const vector_t zero_input = vector_t::Zero(interface_->getManipulatorModelInfo().inputDim);
   return TargetTrajectories({time}, {init_target}, {zero_input});
 }
 
 bool OCS2Controller::initializeHandles()
 {
   auto matches_name = [](const std::string & resource_name, const std::string & expected_joint) {
-    if (resource_name == expected_joint) {
-      return true;
-    }
+    if (resource_name == expected_joint) return true;
     const auto slash_idx = resource_name.find('/');
-    if (slash_idx == std::string::npos) {
-      return false;
-    }
+    if (slash_idx == std::string::npos) return false;
     return resource_name.substr(0, slash_idx) == expected_joint;
   };
 
   auto find_state =
-    [this, &matches_name](
-    const std::string & name,
-    const std::string & interface) -> hardware_interface::LoanedStateInterface * {
+    [this, &matches_name](const std::string & name, const std::string & interface) -> hardware_interface::LoanedStateInterface * {
       for (auto & state : state_interfaces_) {
         if (matches_name(state.get_name(), name) && state.get_interface_name() == interface) {
           return &state;
@@ -672,9 +697,7 @@ bool OCS2Controller::initializeHandles()
     };
 
   auto find_command =
-    [this, &matches_name](
-    const std::string & name,
-    const std::string & interface) -> hardware_interface::LoanedCommandInterface * {
+    [this, &matches_name](const std::string & name, const std::string & interface) -> hardware_interface::LoanedCommandInterface * {
       for (auto & cmd : command_interfaces_) {
         if (matches_name(cmd.get_name(), name) && cmd.get_interface_name() == interface) {
           return &cmd;
@@ -691,14 +714,7 @@ bool OCS2Controller::initializeHandles()
   for (const auto & joint : arm_joint_names_) {
     auto * pos = find_state(joint, hardware_interface::HW_IF_POSITION);
     if (!pos) {
-      RCLCPP_ERROR(
-        get_node()->get_logger(), "[OCS2Controller] missing position state for joint '%s'.",
-        joint.c_str());
-      for (auto & state : state_interfaces_) {
-        RCLCPP_ERROR(
-          get_node()->get_logger(), "  state %s/%s", state.get_name().c_str(),
-          state.get_interface_name().c_str());
-      }
+      RCLCPP_ERROR(get_node()->get_logger(), "[OCS2Controller] missing position state for joint '%s'.", joint.c_str());
       ok = false;
       continue;
     }
@@ -707,9 +723,7 @@ bool OCS2Controller::initializeHandles()
     if (!use_moveit_servo_) {
       auto * pos_cmd = find_command(joint, hardware_interface::HW_IF_POSITION);
       if (!pos_cmd) {
-        RCLCPP_ERROR(
-          get_node()->get_logger(), "[OCS2Controller] missing position command for joint '%s'.",
-          joint.c_str());
+        RCLCPP_ERROR(get_node()->get_logger(), "[OCS2Controller] missing position command for joint '%s'.", joint.c_str());
         ok = false;
       } else {
         joint_position_commands_.push_back(pos_cmd);
@@ -722,6 +736,4 @@ bool OCS2Controller::initializeHandles()
 
 }  // namespace mpc_controller
 
-PLUGINLIB_EXPORT_CLASS(
-  mpc_controller::OCS2Controller,
-  controller_interface::ControllerInterface)
+PLUGINLIB_EXPORT_CLASS(mpc_controller::OCS2Controller, controller_interface::ControllerInterface)

@@ -17,11 +17,15 @@ mpc_controller:
     urdfFile: "$(var urdfFile)"
     libFolder: "$(var libFolder)"
 
+    # Policy / timing parameters
     loopMode: "$(var loopMode)"                 # auto / synchronized(sync) / realtime(rt)
     mpcDesiredFrequency: $(var mpcFreq)         # e.g. 100 [Hz]
     mrtDesiredFrequency: $(var mrtFreq)         # e.g. 250 [Hz]
-    policyTimeToleranceFactor: 0.5              # 0.0~10.0, policy must start within this fraction of dt
+    policyTimeToleranceFactor: 5.0              # 0.0~10.0, policy must start within this fraction of dt
     maxPolicyWaitSeconds: 0.0                   # 0=auto (automatically provide ~2 MPC periods of safety net)
+
+    # Performance logging
+    perfLogPeriod: $(var perfLogPeriod)  # [sec]
 
     # Frames / timing
     globalFrame: "$(var globalFrame)"

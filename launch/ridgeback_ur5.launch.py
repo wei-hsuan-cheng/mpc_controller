@@ -49,6 +49,7 @@ def generate_launch_description():
         DeclareLaunchArgument("loopMode", default_value="auto", description="auto / sync / rt"),
         DeclareLaunchArgument("mpcFreq", default_value="100", description="MPC update frequency (should be integer)"),
         DeclareLaunchArgument("mrtFreq", default_value="250", description="MRT update frequency (should be integer)"),
+        DeclareLaunchArgument("perfLogPeriod", default_value="2.0", description="Performance log period [sec]"),
         DeclareLaunchArgument("controllersFile", default_value=controllers_default),
         DeclareLaunchArgument("globalFrame", default_value="odom"),
         DeclareLaunchArgument("baseCmdTopic", default_value="/cmd_vel"),
