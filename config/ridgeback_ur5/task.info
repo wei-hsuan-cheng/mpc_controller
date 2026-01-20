@@ -5,6 +5,7 @@ model_information {
   ; motion joints in the URDF to consider fixed
   removeJoints {
     // [0] "ur_arm_shoulder_lift_joint"
+    // [0] "ur_arm_wrist_1_joint"
   }
 
   ; base frame of the robot (from URDF)
