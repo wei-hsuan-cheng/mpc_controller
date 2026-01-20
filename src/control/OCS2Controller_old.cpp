@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include <rcl_interfaces/msg/parameter_descriptor.hpp>
+
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 
 #include <Eigen/Geometry>
@@ -28,10 +30,15 @@ using ocs2::mobile_manipulator::MobileManipulatorInterface;
 void OCS2Controller::declareIfUndeclaredNotSet(
   const rclcpp_lifecycle::LifecycleNode::SharedPtr& node, const std::string& name)
 {
-  if (!node->has_parameter(name)) {
-    // Declare as NOT_SET so overrides can be int/double/string safely.
-    node->declare_parameter(name, rclcpp::ParameterValue{});
+  if (node->has_parameter(name)) {
+    return;
   }
+  // IMPORTANT (Humble):
+  // If you declare with NOT_SET and dynamic_typing=false, rclcpp throws:
+  // "cannot declare a statically typed parameter with an uninitialized value"
+  rcl_interfaces::msg::ParameterDescriptor desc;
+  desc.dynamic_typing = true;
+  node->declare_parameter(name, rclcpp::ParameterValue{}, desc);
 }
 
 double OCS2Controller::getParamAsDouble(
@@ -42,19 +49,14 @@ double OCS2Controller::getParamAsDouble(
   declareIfUndeclaredNotSet(node, name);
 
   rclcpp::Parameter p;
-  if (!node->get_parameter(name, p)) {
-    return default_value;
-  }
+  if (!node->get_parameter(name, p)) return default_value;
 
-  if (p.get_type() == rclcpp::ParameterType::PARAMETER_NOT_SET) {
-    return default_value;
-  }
-  if (p.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE) {
-    return p.as_double();
-  }
-  if (p.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) {
-    return static_cast<double>(p.as_int());
-  }
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_NOT_SET) return default_value;
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE) return p.as_double();
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) return static_cast<double>(p.as_int());
+  if (p.get_type() == rclcpp::ParameterType::PARAMETER_STRING) return std::stod(p.as_string());
+
+
   throw std::runtime_error("Parameter '" + name + "' must be int or double.");
 }
 
@@ -67,8 +69,10 @@ std::string OCS2Controller::getParamAsString(
 
   rclcpp::Parameter p;
   if (!node->get_parameter(name, p)) return default_value;
+
   if (p.get_type() == rclcpp::ParameterType::PARAMETER_NOT_SET) return default_value;
   if (p.get_type() == rclcpp::ParameterType::PARAMETER_STRING) return p.as_string();
+
   throw std::runtime_error("Parameter '" + name + "' must be string.");
 }
 
@@ -81,8 +85,10 @@ bool OCS2Controller::getParamAsBool(
 
   rclcpp::Parameter p;
   if (!node->get_parameter(name, p)) return default_value;
+
   if (p.get_type() == rclcpp::ParameterType::PARAMETER_NOT_SET) return default_value;
   if (p.get_type() == rclcpp::ParameterType::PARAMETER_BOOL) return p.as_bool();
+
   throw std::runtime_error("Parameter '" + name + "' must be bool.");
 }
 
@@ -95,8 +101,10 @@ std::vector<std::string> OCS2Controller::getParamAsStringArray(
 
   rclcpp::Parameter p;
   if (!node->get_parameter(name, p)) return default_value;
+
   if (p.get_type() == rclcpp::ParameterType::PARAMETER_NOT_SET) return default_value;
   if (p.get_type() == rclcpp::ParameterType::PARAMETER_STRING_ARRAY) return p.as_string_array();
+
   throw std::runtime_error("Parameter '" + name + "' must be string array.");
 }
 
@@ -144,8 +152,11 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   mpc_desired_frequency_    = getParamAsDouble(node, "mpcDesiredFrequency", 100.0);
   mrt_desired_frequency_    = getParamAsDouble(node, "mrtDesiredFrequency", 250.0);
 
-  policy_time_tolerance_factor_ = getParamAsDouble(node, "policyTimeToleranceFactor", 0.1);
+  policy_time_tolerance_factor_ = getParamAsDouble(node, "policyTimeToleranceFactor", 1.0);
   max_policy_wait_seconds_      = getParamAsDouble(node, "maxPolicyWaitSeconds", 0.0);
+
+  // perf log period (sec)
+  perf_log_period_sec_ = getParamAsDouble(node, "perfLogPeriod", 2.0);
 
   // --- bool ---
   use_moveit_servo_ = getParamAsBool(node, "use_moveit_servo", false);
@@ -158,7 +169,7 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   loop_mode_ = parseLoopMode(loop_mode_str_);
 
   command_smoothing_alpha_ = std::clamp(command_smoothing_alpha_, 0.0, 1.0);
-  policy_time_tolerance_factor_ = std::clamp(policy_time_tolerance_factor_, 0.0, 1.0);
+  policy_time_tolerance_factor_ = std::clamp(policy_time_tolerance_factor_, 0.0, 10.0);
 
   // NOTE: dummy convention: mpcDesiredFrequency < 0 => realtime
   mrt_desired_frequency_ = std::max(1e-3, mrt_desired_frequency_);
@@ -195,6 +206,7 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
     "  mpcUpdateRatio: %zu\n"
     "  policyTimeToleranceFactor: %.3f\n"
     "  maxPolicyWaitSeconds: %.3f\n"
+    "  perfLogPeriod: %.3f\n"
     "  futureTimeOffset: %.3f\n"
     "  commandSmoothingAlpha: %.3f",
     loop_mode_str_.c_str(),
@@ -205,6 +217,7 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
     mpc_update_ratio_,
     policy_time_tolerance_factor_,
     max_policy_wait_seconds_,
+    perf_log_period_sec_,
     future_time_offset_,
     command_smoothing_alpha_);
 
@@ -287,6 +300,15 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   waiting_for_fresh_policy_ = false;
   boundary_time_ = 0.0;
 
+  // perf reset
+  perf_inited_ = false;
+  perf_policy_updates_ = 0;
+  perf_update_policy_calls_ = 0;
+  perf_update_policy_ms_sum_ = 0.0;
+  perf_latest_policy_latency_ms_ = NAN;
+  perf_latest_boundary_latency_ms_ = NAN;
+  have_last_policy_t0_ = false;
+
   return controller_interface::CallbackReturn::SUCCESS;
 }
 
@@ -328,9 +350,12 @@ controller_interface::CallbackReturn OCS2Controller::on_activate(const rclcpp_li
 
   handles_initialized_ = true;
 
+  // perf init timestamps
+  perf_inited_ = false;
+
   RCLCPP_INFO(get_node()->get_logger(),
-    "[OCS2Controller] activated: dummy-like time base (dt=%.6f), non-blocking policy sync.",
-    mrt_dt_);
+    "[OCS2Controller] activated: dummy-like time base (dt=%.6f), perf log period=%.3fs",
+    mrt_dt_, perf_log_period_sec_);
 
   return controller_interface::CallbackReturn::SUCCESS;
 }
@@ -367,12 +392,41 @@ controller_interface::InterfaceConfiguration OCS2Controller::state_interface_con
   return config;
 }
 
-bool OCS2Controller::policyIsFreshForTime(double desired_time, double policy_dt)
+bool OCS2Controller::updatePolicyTimed(double obs_time_sec)
 {
   if (!mrt_) return false;
 
-  (void)mrt_->updatePolicy();
+  const auto t0 = steady_clock_.now();
+  mrt_->updatePolicy();
+  const auto t1 = steady_clock_.now();
+
+  const double dt_ms = (t1 - t0).seconds() * 1000.0;
+  perf_update_policy_calls_ += 1;
+  perf_update_policy_ms_sum_ += dt_ms;
+
   if (!mrt_->initialPolicyReceived()) return false;
+
+  const auto& policy = mrt_->getPolicy();
+  if (policy.timeTrajectory_.empty()) return false;
+
+  const double policy_t0 = policy.timeTrajectory_.front();
+
+  // new policy detection
+  if (!have_last_policy_t0_ || std::abs(policy_t0 - last_policy_t0_) > 1e-12) {
+    perf_policy_updates_ += 1;
+    last_policy_t0_ = policy_t0;
+    have_last_policy_t0_ = true;
+  }
+
+  // policy staleness / latency wrt controller time base
+  perf_latest_policy_latency_ms_ = (obs_time_sec - policy_t0) * 1000.0;
+
+  return true;
+}
+
+bool OCS2Controller::policyIsFreshForTime(double desired_time, double policy_dt)
+{
+  if (!mrt_ || !mrt_->initialPolicyReceived()) return false;
 
   const auto& policy = mrt_->getPolicy();
   if (policy.timeTrajectory_.empty()) return false;
@@ -384,16 +438,61 @@ bool OCS2Controller::policyIsFreshForTime(double desired_time, double policy_dt)
   const bool ok = (diff < tol);
   if (!ok) {
     RCLCPP_WARN_THROTTLE(
-      get_node()->get_logger(), *get_node()->get_clock(), 1000,
-      "[policy sync lag] Policy start time is not aligned with requested time. "
-      "This can happen due to MPC compute/transport delay; controller will continue. "
-      "desired=%.3f, policy_t0=%.3f, |diff|=%.3f > tol=%.3f (dt=%.3f, factor=%.3f)",
+      get_node()->get_logger(), *get_node()->get_clock(), 2000,
+      "[policy sync] desired=%.3f, policy_t0=%.3f, |diff|=%.3f > tol=%.3f (dt=%.3f, factor=%.3f)",
       desired_time, t0, diff, tol, policy_dt, policy_time_tolerance_factor_);
   }
-
   return ok;
 }
 
+void OCS2Controller::maybeLogPerf()
+{
+  if (perf_log_period_sec_ <= 0.0) return;
+
+  const auto now = steady_clock_.now();
+  if (!perf_inited_) {
+    perf_inited_ = true;
+    perf_window_start_ = now;
+    perf_last_log_ = now;
+    return;
+  }
+
+  const double elapsed = (now - perf_last_log_).seconds();
+  if (elapsed < perf_log_period_sec_) return;
+
+  const double window_sec = std::max(1e-9, (now - perf_window_start_).seconds());
+
+  const double policy_rate_hz =
+    static_cast<double>(perf_policy_updates_) / window_sec;
+
+  const double avg_update_policy_ms =
+    (perf_update_policy_calls_ > 0)
+      ? (perf_update_policy_ms_sum_ / static_cast<double>(perf_update_policy_calls_))
+      : 0.0;
+
+  // perf_latest_boundary_latency_ms_ is only meaningful in sync mode when we actually waited.
+  const double boundary_ms = perf_latest_boundary_latency_ms_;
+  const double latency_ms = perf_latest_policy_latency_ms_;
+
+  RCLCPP_INFO(
+    get_node()->get_logger(),
+    "\n####################\n"
+    "[perf] window=%.2f [s] | policy_rate=%.2f [Hz] | updatePolicy(avg)=%.3f [ms] | "
+    "policy_staleness=%.3f [ms] | boundary_latency=%.3f [ms]"
+    "\n####################\n",
+    window_sec,
+    policy_rate_hz,
+    avg_update_policy_ms,
+    std::isfinite(latency_ms) ? latency_ms : -1.0,
+    std::isfinite(boundary_ms) ? boundary_ms : -1.0);
+
+  // reset window stats
+  perf_window_start_ = now;
+  perf_last_log_ = now;
+  perf_policy_updates_ = 0;
+  perf_update_policy_calls_ = 0;
+  perf_update_policy_ms_sum_ = 0.0;
+}
 
 controller_interface::return_type OCS2Controller::update(const rclcpp::Time &, const rclcpp::Duration &)
 {
@@ -403,17 +502,19 @@ controller_interface::return_type OCS2Controller::update(const rclcpp::Time &, c
 
   mrt_->spinMRT();
 
-  if (loop_mode_ == LoopMode::kRealtime) {
-    return runRealtimeLoopStep();
-  }
-  return runSynchronizedLoopStep();
+  controller_interface::return_type ret =
+    (loop_mode_ == LoopMode::kRealtime) ? runRealtimeLoopStep() : runSynchronizedLoopStep();
+
+  maybeLogPerf();
+  return ret;
 }
 
 controller_interface::return_type OCS2Controller::runRealtimeLoopStep()
 {
   SystemObservation obs = buildObservation(virtual_time_);
   mrt_->setCurrentObservation(obs);
-  (void)mrt_->updatePolicy();
+
+  (void)updatePolicyTimed(obs.time);
 
   if (!mrt_->initialPolicyReceived()) {
     applyHoldCommand(obs);
@@ -455,7 +556,8 @@ controller_interface::return_type OCS2Controller::runSynchronizedLoopStep()
   const bool at_boundary = (loop_counter_ % mpc_update_ratio_ == 0);
   SystemObservation obs = buildObservation(virtual_time_);
 
-  (void)mrt_->updatePolicy();
+  // timed updatePolicy + perf stats
+  (void)updatePolicyTimed(obs.time);
 
   if (at_boundary) {
     if (!waiting_for_fresh_policy_) {
@@ -468,15 +570,22 @@ controller_interface::return_type OCS2Controller::runSynchronizedLoopStep()
     const bool fresh = policyIsFreshForTime(boundary_time_, policy_dt_);
     if (!fresh) {
       applyHoldCommand(obs);
+
       const double waited = (steady_clock_.now() - wait_start_steady_).seconds();
       if (waited <= max_policy_wait_seconds_) {
         return controller_interface::return_type::OK;
       }
-      // timeout fallback: if policy exists, continue even if not fresh
+
+      // timeout fallback: if still no policy, hold
       if (!mrt_->initialPolicyReceived()) {
         return controller_interface::return_type::OK;
       }
+      // otherwise continue even if not fresh
     }
+
+    // We are allowed to step now. Record boundary end-to-end latency in ms.
+    perf_latest_boundary_latency_ms_ =
+      (steady_clock_.now() - wait_start_steady_).seconds() * 1000.0;
 
     waiting_for_fresh_policy_ = false;
   }
@@ -589,8 +698,6 @@ void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const v
       last_arm_pos_cmd_[i] = q_cmd;
       joint_position_commands_[i]->set_value(q_cmd);
     }
-  } else {
-    // MoveIt Servo mode: keep your existing design (publish JointJog) if you want.
   }
 }
 

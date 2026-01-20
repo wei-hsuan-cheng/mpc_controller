@@ -23,6 +23,7 @@
 #include <ocs2_core/reference/TargetTrajectories.h>
 #include <ocs2_mpc/SystemObservation.h>
 #include <ocs2_mobile_manipulator/MobileManipulatorInterface.h>
+#include <ocs2_mobile_manipulator/ManipulatorModelInfo.h>  // <-- for ManipulatorModelType
 #include <ocs2_ros_interfaces/mrt/MRT_ROS_Interface.h>
 
 #include "mpc_controller/visualization/MobileManipulatorVisualization.h"
@@ -55,6 +56,7 @@ private:
   using SystemObservation = ocs2::SystemObservation;
   using TargetTrajectories = ocs2::TargetTrajectories;
   using MobileManipulatorInterface = ocs2::mobile_manipulator::MobileManipulatorInterface;
+  using ManipulatorModelType = ocs2::mobile_manipulator::ManipulatorModelType;
 
   enum class LoopMode { kAuto, kSynchronized, kRealtime };
 
@@ -98,7 +100,6 @@ private:
   controller_interface::return_type runRealtimeLoopStep();
 
   // Update policy once (timed) and update perf statistics.
-  // Returns true if a valid policy exists (initialPolicyReceived && !timeTrajectory empty).
   bool updatePolicyTimed(double obs_time_sec);
 
   // Check freshness using the CURRENT policy (no updatePolicy inside).
@@ -106,6 +107,9 @@ private:
 
   // Perf logging
   void maybeLogPerf();
+
+  // ===== Model layout =====
+  void resolveModelLayout();
 
 private:
   // ===== Parameters =====
@@ -172,8 +176,15 @@ private:
   // last OCS2 input used in obs.input
   vector_t last_command_;
 
+  // ===== Model-dependent layout =====
+  ManipulatorModelType model_type_{ManipulatorModelType::WheelBasedMobileManipulator};
+  size_t base_state_dim_{3};
+  size_t base_input_dim_{2};
+  size_t arm_state_offset_{3};
+  size_t arm_input_offset_{2};
+
   // Alpha LPF state
-  vector_t last_base_cmd_{vector_t::Zero(2)};  // [v, w]
+  vector_t last_base_cmd_{vector_t::Zero(0)};  // wheel-based: size=2, else empty
   std::vector<double> last_arm_pos_cmd_;
 
   // Loop state

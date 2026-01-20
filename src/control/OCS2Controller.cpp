@@ -8,7 +8,6 @@
 #include <vector>
 
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
-
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 
 #include <Eigen/Geometry>
@@ -24,6 +23,7 @@ using ocs2::SystemObservation;
 using ocs2::TargetTrajectories;
 using ocs2::vector_t;
 using ocs2::mobile_manipulator::MobileManipulatorInterface;
+using ocs2::mobile_manipulator::ManipulatorModelType;
 
 // ===== Param helpers =====
 
@@ -33,9 +33,6 @@ void OCS2Controller::declareIfUndeclaredNotSet(
   if (node->has_parameter(name)) {
     return;
   }
-  // IMPORTANT (Humble):
-  // If you declare with NOT_SET and dynamic_typing=false, rclcpp throws:
-  // "cannot declare a statically typed parameter with an uninitialized value"
   rcl_interfaces::msg::ParameterDescriptor desc;
   desc.dynamic_typing = true;
   node->declare_parameter(name, rclcpp::ParameterValue{}, desc);
@@ -55,7 +52,6 @@ double OCS2Controller::getParamAsDouble(
   if (p.get_type() == rclcpp::ParameterType::PARAMETER_DOUBLE) return p.as_double();
   if (p.get_type() == rclcpp::ParameterType::PARAMETER_INTEGER) return static_cast<double>(p.as_int());
   if (p.get_type() == rclcpp::ParameterType::PARAMETER_STRING) return std::stod(p.as_string());
-
 
   throw std::runtime_error("Parameter '" + name + "' must be int or double.");
 }
@@ -129,6 +125,59 @@ void OCS2Controller::resolveLoopMode()
   }
 }
 
+// ===== Model layout =====
+void OCS2Controller::resolveModelLayout()
+{
+  // Default: wheel-based (type 1)
+  model_type_ = ManipulatorModelType::WheelBasedMobileManipulator;
+  base_state_dim_ = 3;
+  base_input_dim_ = 2;
+  arm_state_offset_ = 3;
+  arm_input_offset_ = 2;
+
+  if (!interface_) return;
+
+  const auto& info = interface_->getManipulatorModelInfo();
+  model_type_ = info.manipulatorModelType;
+
+  switch (model_type_) {
+    case ManipulatorModelType::DefaultManipulator:
+      // state=[q_arm], input=[dq_arm]
+      base_state_dim_ = 0;
+      base_input_dim_ = 0;
+      arm_state_offset_ = 0;
+      arm_input_offset_ = 0;
+      break;
+
+    case ManipulatorModelType::WheelBasedMobileManipulator:
+      // state=[x y yaw q_arm], input=[v w dq_arm]
+      base_state_dim_ = 3;
+      base_input_dim_ = 2;
+      arm_state_offset_ = 3;
+      arm_input_offset_ = 2;
+      break;
+
+    case ManipulatorModelType::FloatingArmManipulator:
+      // state=[x y z r p y q_arm], input=[dq_arm]
+      base_state_dim_ = 6;
+      base_input_dim_ = 0;
+      arm_state_offset_ = 6;
+      arm_input_offset_ = 0;
+      break;
+
+    case ManipulatorModelType::FullyActuatedFloatingArmManipulator:
+      // state=[x y z r p y q_arm], input=[vx vy vz wx wy wz dq_arm]
+      base_state_dim_ = 6;
+      base_input_dim_ = 6;
+      arm_state_offset_ = 6;
+      arm_input_offset_ = 6;
+      break;
+
+    default:
+      throw std::runtime_error("[OCS2Controller] Unsupported manipulatorModelType.");
+  }
+}
+
 controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_lifecycle::State &)
 {
   auto node = get_node();
@@ -145,7 +194,7 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   odom_topic_      = getParamAsString(node, "odom_topic", odom_topic_);
   joint_jog_topic_ = getParamAsString(node, "joint_jog_topic", joint_jog_topic_);
 
-  // --- numeric (robust int/double) ---
+  // --- numeric ---
   future_time_offset_       = getParamAsDouble(node, "futureTimeOffset", 0.0);
   command_smoothing_alpha_  = getParamAsDouble(node, "commandSmoothingAlpha", 1.0);
 
@@ -155,7 +204,6 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   policy_time_tolerance_factor_ = getParamAsDouble(node, "policyTimeToleranceFactor", 1.0);
   max_policy_wait_seconds_      = getParamAsDouble(node, "maxPolicyWaitSeconds", 0.0);
 
-  // perf log period (sec)
   perf_log_period_sec_ = getParamAsDouble(node, "perfLogPeriod", 2.0);
 
   // --- bool ---
@@ -171,7 +219,6 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   command_smoothing_alpha_ = std::clamp(command_smoothing_alpha_, 0.0, 1.0);
   policy_time_tolerance_factor_ = std::clamp(policy_time_tolerance_factor_, 0.0, 10.0);
 
-  // NOTE: dummy convention: mpcDesiredFrequency < 0 => realtime
   mrt_desired_frequency_ = std::max(1e-3, mrt_desired_frequency_);
   if (mpc_desired_frequency_ > 0.0) {
     mpc_desired_frequency_ = std::max(1e-3, mpc_desired_frequency_);
@@ -195,32 +242,6 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
 
   resolveLoopMode();
 
-  RCLCPP_INFO(
-    node->get_logger(),
-    "[OCS2Controller] loop settings:\n"
-    "  loopMode: %s\n"
-    "  mpcDesiredFrequency: %.3f\n"
-    "  mrtDesiredFrequency: %.3f\n"
-    "  mrtDt: %.6f\n"
-    "  policyDt: %.6f\n"
-    "  mpcUpdateRatio: %zu\n"
-    "  policyTimeToleranceFactor: %.3f\n"
-    "  maxPolicyWaitSeconds: %.3f\n"
-    "  perfLogPeriod: %.3f\n"
-    "  futureTimeOffset: %.3f\n"
-    "  commandSmoothingAlpha: %.3f",
-    loop_mode_str_.c_str(),
-    mpc_desired_frequency_,
-    mrt_desired_frequency_,
-    mrt_dt_,
-    policy_dt_,
-    mpc_update_ratio_,
-    policy_time_tolerance_factor_,
-    max_policy_wait_seconds_,
-    perf_log_period_sec_,
-    future_time_offset_,
-    command_smoothing_alpha_);
-
   if (task_file_.empty() || lib_folder_.empty() || urdf_file_.empty()) {
     RCLCPP_ERROR(node->get_logger(),
       "[OCS2Controller] parameters 'taskFile', 'libFolder' or 'urdfFile' are empty.");
@@ -234,6 +255,24 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
     RCLCPP_ERROR(node->get_logger(), "Failed to create MobileManipulatorInterface: %s", e.what());
     return controller_interface::CallbackReturn::ERROR;
   }
+
+  // Resolve model-dependent layout AFTER interface is created
+  try {
+    resolveModelLayout();
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(node->get_logger(), "[OCS2Controller] resolveModelLayout failed: %s", e.what());
+    return controller_interface::CallbackReturn::ERROR;
+  }
+
+  const auto & info = interface_->getManipulatorModelInfo();
+  state_dim_ = info.stateDim;
+  input_dim_ = info.inputDim;
+
+  RCLCPP_INFO(
+    node->get_logger(),
+    "[OCS2Controller] modelType=%d | stateDim=%d inputDim=%d | base_state_dim=%zu base_input_dim=%zu | arm_state_offset=%zu arm_input_offset=%zu",
+    static_cast<int>(model_type_), state_dim_, input_dim_,
+    base_state_dim_, base_input_dim_, arm_state_offset_, arm_input_offset_);
 
   // --- visualization (optional) ---
   try {
@@ -263,10 +302,7 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
     return controller_interface::CallbackReturn::ERROR;
   }
 
-  const auto & info = interface_->getManipulatorModelInfo();
-  state_dim_ = info.stateDim;
-  input_dim_ = info.inputDim;
-
+  // ---- buffers ----
   initial_observation_.state = vector_t::Zero(state_dim_);
   initial_observation_.input = vector_t::Zero(input_dim_);
   initial_observation_.time = 0.0;
@@ -274,23 +310,36 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   initial_target_ = TargetTrajectories();
 
   last_command_ = vector_t::Zero(input_dim_);
-  last_base_cmd_ = vector_t::Zero(2);
+  last_base_cmd_ = vector_t::Zero(static_cast<Eigen::Index>(base_input_dim_));
   last_arm_pos_cmd_.assign(static_cast<size_t>(info.armDim), 0.0);
 
-  base_cmd_pub_ = node->create_publisher<geometry_msgs::msg::Twist>(base_cmd_topic_, rclcpp::SystemDefaultsQoS());
-  joint_jog_pub_ = node->create_publisher<control_msgs::msg::JointJog>(joint_jog_topic_, rclcpp::SystemDefaultsQoS());
+  // ---- pubs/subs: only enable what is meaningful ----
+  if (model_type_ == ManipulatorModelType::WheelBasedMobileManipulator) {
+    base_cmd_pub_ = node->create_publisher<geometry_msgs::msg::Twist>(
+      base_cmd_topic_, rclcpp::SystemDefaultsQoS());
+  } else {
+    base_cmd_pub_.reset();
+  }
 
-  odom_sub_ = node->create_subscription<nav_msgs::msg::Odometry>(
-    odom_topic_, rclcpp::SystemDefaultsQoS(),
-    [this](const nav_msgs::msg::Odometry::SharedPtr msg) {
-      std::lock_guard<std::mutex> lock(odom_mutex_);
-      base_pose_from_odom_[0] = msg->pose.pose.position.x;
-      base_pose_from_odom_[1] = msg->pose.pose.position.y;
-      const auto & q = msg->pose.pose.orientation;
-      const double siny_cosp = 2.0 * (q.w * q.z + q.x * q.y);
-      const double cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
-      base_pose_from_odom_[2] = std::atan2(siny_cosp, cosy_cosp);
-    });
+  joint_jog_pub_ = node->create_publisher<control_msgs::msg::JointJog>(
+    joint_jog_topic_, rclcpp::SystemDefaultsQoS());
+
+  // subscribe odom only if base state contains at least (x,y,yaw)
+  if (base_state_dim_ >= 3) {
+    odom_sub_ = node->create_subscription<nav_msgs::msg::Odometry>(
+      odom_topic_, rclcpp::SystemDefaultsQoS(),
+      [this](const nav_msgs::msg::Odometry::SharedPtr msg) {
+        std::lock_guard<std::mutex> lock(odom_mutex_);
+        base_pose_from_odom_[0] = msg->pose.pose.position.x;
+        base_pose_from_odom_[1] = msg->pose.pose.position.y;
+        const auto & q = msg->pose.pose.orientation;
+        const double siny_cosp = 2.0 * (q.w * q.z + q.x * q.y);
+        const double cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
+        base_pose_from_odom_[2] = std::atan2(siny_cosp, cosy_cosp);
+      });
+  } else {
+    odom_sub_.reset();
+  }
 
   // loop reset
   mpc_reset_done_ = false;
@@ -331,13 +380,14 @@ controller_interface::CallbackReturn OCS2Controller::on_activate(const rclcpp_li
   const size_t arm_dim = arm_joint_names_.size();
   last_arm_pos_cmd_.resize(arm_dim, 0.0);
   for (size_t i = 0; i < arm_dim; ++i) {
-    const Eigen::Index si = 3 + static_cast<Eigen::Index>(i);
+    const Eigen::Index si = static_cast<Eigen::Index>(arm_state_offset_ + i);
     if (si < initial_observation_.state.size()) {
       last_arm_pos_cmd_[i] = initial_observation_.state(si);
     }
   }
-  last_base_cmd_.setZero();
-  last_command_.setZero();
+
+  if (last_base_cmd_.size() > 0) last_base_cmd_.setZero();
+  if (last_command_.size() == input_dim_) last_command_.setZero();
 
   applyHoldCommand(initial_observation_);
 
@@ -349,8 +399,6 @@ controller_interface::CallbackReturn OCS2Controller::on_activate(const rclcpp_li
   }
 
   handles_initialized_ = true;
-
-  // perf init timestamps
   perf_inited_ = false;
 
   RCLCPP_INFO(get_node()->get_logger(),
@@ -411,16 +459,13 @@ bool OCS2Controller::updatePolicyTimed(double obs_time_sec)
 
   const double policy_t0 = policy.timeTrajectory_.front();
 
-  // new policy detection
   if (!have_last_policy_t0_ || std::abs(policy_t0 - last_policy_t0_) > 1e-12) {
     perf_policy_updates_ += 1;
     last_policy_t0_ = policy_t0;
     have_last_policy_t0_ = true;
   }
 
-  // policy staleness / latency wrt controller time base
   perf_latest_policy_latency_ms_ = (obs_time_sec - policy_t0) * 1000.0;
-
   return true;
 }
 
@@ -470,7 +515,6 @@ void OCS2Controller::maybeLogPerf()
       ? (perf_update_policy_ms_sum_ / static_cast<double>(perf_update_policy_calls_))
       : 0.0;
 
-  // perf_latest_boundary_latency_ms_ is only meaningful in sync mode when we actually waited.
   const double boundary_ms = perf_latest_boundary_latency_ms_;
   const double latency_ms = perf_latest_policy_latency_ms_;
 
@@ -486,7 +530,6 @@ void OCS2Controller::maybeLogPerf()
     std::isfinite(latency_ms) ? latency_ms : -1.0,
     std::isfinite(boundary_ms) ? boundary_ms : -1.0);
 
-  // reset window stats
   perf_window_start_ = now;
   perf_last_log_ = now;
   perf_policy_updates_ = 0;
@@ -556,7 +599,6 @@ controller_interface::return_type OCS2Controller::runSynchronizedLoopStep()
   const bool at_boundary = (loop_counter_ % mpc_update_ratio_ == 0);
   SystemObservation obs = buildObservation(virtual_time_);
 
-  // timed updatePolicy + perf stats
   (void)updatePolicyTimed(obs.time);
 
   if (at_boundary) {
@@ -576,14 +618,11 @@ controller_interface::return_type OCS2Controller::runSynchronizedLoopStep()
         return controller_interface::return_type::OK;
       }
 
-      // timeout fallback: if still no policy, hold
       if (!mrt_->initialPolicyReceived()) {
         return controller_interface::return_type::OK;
       }
-      // otherwise continue even if not fresh
     }
 
-    // We are allowed to step now. Record boundary end-to-end latency in ms.
     perf_latest_boundary_latency_ms_ =
       (steady_clock_.now() - wait_start_steady_).seconds() * 1000.0;
 
@@ -638,18 +677,20 @@ controller_interface::return_type OCS2Controller::runSynchronizedLoopStep()
 
 void OCS2Controller::applyHoldCommand(const SystemObservation & observation)
 {
-  if (base_cmd_pub_) {
+  // base hold: only for wheel-based model (Twist v,w)
+  if (model_type_ == ManipulatorModelType::WheelBasedMobileManipulator && base_cmd_pub_) {
     geometry_msgs::msg::Twist cmd;
     cmd.linear.x = 0.0;
     cmd.angular.z = 0.0;
     base_cmd_pub_->publish(cmd);
   }
-  last_base_cmd_.setZero();
+  if (last_base_cmd_.size() > 0) last_base_cmd_.setZero();
 
+  // arm hold
   const size_t arm_dim = arm_joint_names_.size();
   if (!use_moveit_servo_ && joint_position_commands_.size() >= arm_dim) {
     for (size_t i = 0; i < arm_dim; ++i) {
-      const Eigen::Index si = 3 + static_cast<Eigen::Index>(i);
+      const Eigen::Index si = static_cast<Eigen::Index>(arm_state_offset_ + i);
       if (si < observation.state.size()) {
         joint_position_commands_[i]->set_value(observation.state(si));
         if (i < last_arm_pos_cmd_.size()) last_arm_pos_cmd_[i] = observation.state(si);
@@ -664,21 +705,25 @@ void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const v
 {
   const double a = command_smoothing_alpha_;
 
-  // base LPF (vel)
-  vector_t u_base = vector_t::Zero(2);
-  if (u_end.size() >= 2) {
-    u_base(0) = u_end(0);
-    u_base(1) = u_end(1);
-  }
+  // base LPF (vel) only for wheel-based
+  if (model_type_ == ManipulatorModelType::WheelBasedMobileManipulator) {
+    vector_t u_base = vector_t::Zero(2);
+    if (u_end.size() >= 2) {
+      u_base(0) = u_end(0);
+      u_base(1) = u_end(1);
+    }
 
-  const vector_t blended_base = a * u_base + (1.0 - a) * last_base_cmd_;
-  last_base_cmd_ = blended_base;
+    if (last_base_cmd_.size() != 2) last_base_cmd_ = vector_t::Zero(2);
 
-  if (base_cmd_pub_) {
-    geometry_msgs::msg::Twist cmd;
-    cmd.linear.x = blended_base(0);
-    cmd.angular.z = blended_base(1);
-    base_cmd_pub_->publish(cmd);
+    const vector_t blended_base = a * u_base + (1.0 - a) * last_base_cmd_;
+    last_base_cmd_ = blended_base;
+
+    if (base_cmd_pub_) {
+      geometry_msgs::msg::Twist cmd;
+      cmd.linear.x = blended_base(0);
+      cmd.angular.z = blended_base(1);
+      base_cmd_pub_->publish(cmd);
+    }
   }
 
   // arm LPF (pos)
@@ -690,7 +735,7 @@ void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const v
     if (last_arm_pos_cmd_.size() != arm_dim) last_arm_pos_cmd_.assign(arm_dim, 0.0);
 
     for (size_t i = 0; i < arm_dim; ++i) {
-      const Eigen::Index si = 3 + static_cast<Eigen::Index>(i);
+      const Eigen::Index si = static_cast<Eigen::Index>(arm_state_offset_ + i);
       if (si >= x_next.size()) continue;
 
       const double q_next = x_next(si);
@@ -724,17 +769,17 @@ SystemObservation OCS2Controller::buildObservation(double time_sec) const
   obs.input = last_command_;
   obs.mode = 0;
 
-  {
+  // base (only fill x,y,yaw if base_state_dim_ >= 3)
+  if (base_state_dim_ >= 3) {
     std::lock_guard<std::mutex> lock(odom_mutex_);
-    if (state_dim_ >= 3) {
-      obs.state(0) = base_pose_from_odom_[0];
-      obs.state(1) = base_pose_from_odom_[1];
-      obs.state(2) = base_pose_from_odom_[2];
-    }
+    obs.state(0) = base_pose_from_odom_[0];
+    obs.state(1) = base_pose_from_odom_[1];
+    obs.state(2) = base_pose_from_odom_[2];
   }
 
+  // arm joints
   for (size_t idx = 0; idx < arm_joint_names_.size(); ++idx) {
-    const Eigen::Index si = static_cast<Eigen::Index>(3 + idx);
+    const Eigen::Index si = static_cast<Eigen::Index>(arm_state_offset_ + idx);
     if (si < obs.state.size() && idx < joint_position_states_.size()) {
       obs.state(si) = joint_position_states_[idx]->get_value();
     }
@@ -751,6 +796,9 @@ TargetTrajectories OCS2Controller::computeInitialTarget(const vector_t & state, 
   const auto & model = pin_interface.getModel();
   auto data = pin_interface.getData();
 
+  // NOTE:
+  // state dimension here matches the pinocchio model created by MobileManipulatorInterface
+  // for each manipulatorModelType, so forwardKinematics(model,data,state) is consistent.
   pinocchio::forwardKinematics(model, data, state);
   pinocchio::updateFramePlacements(model, data);
 

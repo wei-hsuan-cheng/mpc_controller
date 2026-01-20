@@ -2,6 +2,7 @@
 #define MPC_CONTROLLER__OCS2_CONTROLLER_HPP_
 
 #include <array>
+#include <cmath>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -96,7 +97,15 @@ private:
   controller_interface::return_type runSynchronizedLoopStep();
   controller_interface::return_type runRealtimeLoopStep();
 
+  // Update policy once (timed) and update perf statistics.
+  // Returns true if a valid policy exists (initialPolicyReceived && !timeTrajectory empty).
+  bool updatePolicyTimed(double obs_time_sec);
+
+  // Check freshness using the CURRENT policy (no updatePolicy inside).
   bool policyIsFreshForTime(double desired_time, double policy_dt);
+
+  // Perf logging
+  void maybeLogPerf();
 
 private:
   // ===== Parameters =====
@@ -122,6 +131,9 @@ private:
   double mrt_desired_frequency_{250.0};
   double policy_time_tolerance_factor_{0.1};
   double max_policy_wait_seconds_{0.0};  // 0 -> auto
+
+  // Perf logging period (sec). <=0 disables.
+  double perf_log_period_sec_{2.0};
 
   // Derived
   double mrt_dt_{0.004};
@@ -176,6 +188,26 @@ private:
   rclcpp::Clock steady_clock_{RCL_STEADY_TIME};
   rclcpp::Time wait_start_steady_{0, 0, RCL_STEADY_TIME};
   double boundary_time_{0.0};
+
+  // ===== Perf stats (steady clock based) =====
+  bool perf_inited_{false};
+  rclcpp::Time perf_window_start_{0, 0, RCL_STEADY_TIME};
+  rclcpp::Time perf_last_log_{0, 0, RCL_STEADY_TIME};
+
+  // policy update rate
+  size_t perf_policy_updates_{0};
+  double last_policy_t0_{0.0};
+  bool have_last_policy_t0_{false};
+
+  // updatePolicy processing time (controller-side)
+  size_t perf_update_policy_calls_{0};
+  double perf_update_policy_ms_sum_{0.0};
+
+  // latency / staleness (ms)
+  double perf_latest_policy_latency_ms_{NAN};
+
+  // boundary solve latency (ms) in sync mode
+  double perf_latest_boundary_latency_ms_{NAN};
 };
 
 }  // namespace mpc_controller

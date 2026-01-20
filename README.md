@@ -1,6 +1,6 @@
 # mpc_controller
 
-Minimal ROS 2 control package that embeds the [OCS2](https://leggedrobotics.github.io/ocs2/) mobile manipulator MPC stack in a `ros2_control` workflow.
+Minimal ROS 2 control package that embeds the [OCS2](https://leggedrobotics.github.io/ocs2/) **mobile manipulator** MPC stack in a `ros2_control` workflow.
 
 The package is intentionally self‑contained (`urdf`/`xacro`, `task` and `rviz` config), but it **depends on the upstream OCS2 ROS 2 repositories** for the solver libraries and marker/MPC nodes.
 
@@ -70,9 +70,42 @@ description/      -> xacro/urdf assets (ros2_control settings included)
 include/          -> Header files
 rviz/             -> RViz configuration copied from OCS2 examples
 src/
+  command/        -> Support different reference command (marker/twist/trajecotry)
   control/        -> ros2_control controllers (OCS2 bridge)
+  mpc/            -> OCS2 MPC node (DDP or SQP solver supported)
+  sim/            -> Simple planar base fake odom simulation
   visualization/  -> Marker, trajectory, and pose visualizations in RViz2
 ```
+
+## Robot model meta-information (fixed vs. floating base)
+
+The robot kinematic model type is configured in the [`task.info`](./config/ridgeback_ur5/task.info) via model_information.
+This lets you switch between a fixed-base arm and different floating/mobile base variants by changing a single block:
+
+```bash
+; robot model meta-information
+model_information {
+  manipulatorModelType     1      // 0: Default-arm (fixed base)
+                                  // 1: Wheel-based mobile manipulator
+                                  // 2: Floating-arm manipulator
+                                  // 3: Fully actuated floating-arm manipulator
+
+  ; motion joints in the URDF to consider fixed (optional)
+  removeJoints {
+    // [0] "ur_arm_shoulder_lift_joint"
+  }
+
+  ; base frame of the robot (from URDF)
+  baseFrame                       "base_link"
+
+  ; end-effector frame of the robot (from URDF)
+  eeFrame                         "ur_arm_tool0" // e.g., ur_arm_tool0, ur_arm_flange
+}
+```
+
+Model type selection:
+- `manipulatorModelType=0` for a standard fixed-base arm. 
+- `manipulatorModelType=1/2/3` when you want the base to be mobile/floating (wheel-based or free-floating), while keeping the same arm/EE frames from your URDF.
 
 ## MPC rollout topic
 
