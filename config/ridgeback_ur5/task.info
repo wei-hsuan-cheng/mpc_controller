@@ -248,33 +248,6 @@ selfCollision
   ; TODO: Replace the collision meshes of the arm with primitive shapes.
 }
 
-selfCollision_old
-{ 
-  ; activate self-collision constraint
-  activate  true // false; true
-
-  ; Self Collision raw object pairs
-  collisionObjectPairs
-  {
-    //[0] "5, 8"
-    [0] "5, 9"
-    //[2] "5, 10"
-    //[3] "5, 11"
-    //[4] "5, 12"
-  }
-
-  ; minimum distance allowed between the pairs
-  minimumDistance  0.1
-
-  ; relaxed log barrier mu
-  mu     1e-2
-
-  ; relaxed log barrier delta
-  delta  1e-3
-  
-  ; TODO: Replace the collision meshes of the arm with primitive shapes.
-}
-
 ; Only applied for arm joints: limits parsed from URDF
 jointPositionLimits
 { 
