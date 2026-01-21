@@ -1,8 +1,8 @@
 # mpc_controller
 
-Minimal ROS 2 control package that embeds the [OCS2](https://leggedrobotics.github.io/ocs2/) **mobile manipulator** MPC stack in a `ros2_control` workflow.
+Minimal ROS 2 package that embeds the [OCS2](https://leggedrobotics.github.io/ocs2/) **mobile manipulator** MPC stack in a [`ros2_control`](https://control.ros.org/humble/index.html) workflow.
 
-The package is intentionally self‑contained (`urdf`/`xacro`, `task` and `rviz` config), but it **depends on the upstream OCS2 ROS 2 repositories** for the solver libraries and marker/MPC nodes.
+The package is intentionally self‑contained (`urdf`/`xacro`, `task` and `rviz` config), but it **depends on the upstream OCS2 ROS 2 repositories** for the solver libraries.
 
 ## Prerequisites
 
@@ -10,7 +10,10 @@ The package is intentionally self‑contained (`urdf`/`xacro`, `task` and `rviz`
 2. Clone and build [`ocs2_ros2`](https://github.com/wei-hsuan-cheng/ocs2_ros2) up to `ocs2_mobile_manipulator_ros` `pkg`:
     ```bash
     cd ~/ros2_ws
-    colcon build --symlink-install --packages-up-to ocs2_mobile_manipulator_ros
+    colcon build --symlink-install \
+      --packages-up-to ocs2_mobile_manipulator_ros \
+      --parallel-workers 2 --executor sequential \
+      && . install/setup.bash
     ```
     - Make sure the [`ocs2_ros2`](https://github.com/wei-hsuan-cheng/ocs2_ros2) workspace is sourced before building this package.
 
@@ -43,25 +46,11 @@ ros2 launch mpc_controller ridgeback_ur5.launch.py \
 # use_fake_hardware:=true, false
 ```
 
-Key arguments:
-- `taskFile`, `urdfFile`, `libFolder`: OCS2 inputs (used by both MPC node and controller).
-- `baseCmdTopic`, `odomTopic`: topics used by the controller for base command / odometry.
-
-
 If you built [`ocs2_ros2`](https://github.com/wei-hsuan-cheng/ocs2_ros2) in another workspace, source it **before** running the commands above (so their messages and plugins are discoverable).
 
-Useful arguments:
-
-| Argument            | Default  | Description                                                    |
-|---------------------|----------|----------------------------------------------------------------|
-| `rviz`              | `true`   | Enable/disable RViz + interactive marker.                      |
-| `taskFile`          | local    | Path to the OCS2 `task.info` file.                             |
-| `libFolder`         | local    | Folder containing the auto-generated OCS2 libs.                |
-| `urdfFile`          | local    | URDF used by visualization nodes.                              |
-| `commandType`       | `marker` | Target interface to start: `marker`, `twist`, or `trajectory`. |
-| `markerPublishRate` | `100.0`  | Interactive marker publish rate (Hz, `commandType=marker`).    |
-
 ## Folder layout
+
+Key parameters are specified in [`task.info`](./config/ridgeback_ur5/task.info) and [`ros2_controllers.yaml`](./config/ridgeback_ur5/ros2_controllers.yaml).
 
 ```bash
 auto_generated/   -> pre-built OCS2 libraries (CppAD) for robot
