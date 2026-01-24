@@ -12,6 +12,7 @@ model_information {
   baseFrame                       "base_link"
   ; end-effector frame of the robot (from URDF)
   eeFrame                         "ur_arm_tool0" // ur_arm_tool0; ur_arm_flange
+  eeFrame1    "ur_arm_tool0"   ; optional but safe (for dual-arm code path)
 }
 
 model_settings
@@ -220,6 +221,40 @@ finalEndEffector
 {
   muPosition       10.0 // 10.0, 50.0, 5.0
   muOrientation    05.0 // 5.0, 25.0, 2.5
+}
+
+jointTracking
+{
+  activate  true
+
+  ; penalties (QuadraticPenalty mu)
+  muBase    50.0
+  muArm     20.0
+
+  reference
+  {
+    ; base pose tracking for wheelBasedMobileManipulator: [x, y, yaw]
+    base
+    {
+      wheelBasedMobileManipulator
+      {
+        (0,0)  0.0   ; x
+        (1,0)  0.0   ; y
+        (2,0)  0.0   ; yaw
+      }
+    }
+
+    ; arm joint reference (size = armDim)
+    arm
+    {
+      (0,0)   0.0
+      (1,0)  -1.5708
+      (2,0)   1.5708
+      (3,0)   3.1416
+      (4,0)  -1.5708
+      (5,0)   0.0
+    }
+  }
 }
 
 selfCollision
