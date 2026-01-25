@@ -210,6 +210,53 @@ inputCost
   }
 }
 
+jointTracking
+{
+  activate  false
+  mu        20.0
+
+  ; ARM ONLY reference (size = armDim)
+  reference
+  {
+    (0,0)   0.0
+    (1,0)  -1.5708
+    (2,0)   1.5708
+    (3,0)   3.1416
+    (4,0)  -1.5708
+    (5,0)   0.0
+  }
+}
+
+baseTracking
+{
+  activate true
+  mu  50.0
+
+  reference
+  {
+    base
+    {
+      wheelBasedMobileManipulator
+      {
+        (0,0)  0.0  ; x
+        (1,0)  0.0  ; y
+        (2,0)  0.0  ; yaw
+      }
+
+      floatingArmManipulator
+      {
+        (0,0)  0.0
+        (1,0)  0.0
+        (2,0)  0.0
+        (3,0)  0.0  ; euler z
+        (4,0)  0.0  ; euler y
+        (5,0)  0.0  ; euler x
+      }
+
+    }
+  }
+}
+
 endEffector
 {
   ; end effector quadratic penalty scaling
@@ -221,40 +268,6 @@ finalEndEffector
 {
   muPosition       10.0 // 10.0, 50.0, 5.0
   muOrientation    05.0 // 5.0, 25.0, 2.5
-}
-
-jointTracking
-{
-  activate  true
-
-  ; penalties (QuadraticPenalty mu)
-  muBase    50.0
-  muArm     20.0
-
-  reference
-  {
-    ; base pose tracking for wheelBasedMobileManipulator: [x, y, yaw]
-    base
-    {
-      wheelBasedMobileManipulator
-      {
-        (0,0)  0.0   ; x
-        (1,0)  0.0   ; y
-        (2,0)  0.0   ; yaw
-      }
-    }
-
-    ; arm joint reference (size = armDim)
-    arm
-    {
-      (0,0)   0.0
-      (1,0)  -1.5708
-      (2,0)   1.5708
-      (3,0)   3.1416
-      (4,0)  -1.5708
-      (5,0)   0.0
-    }
-  }
 }
 
 selfCollision
