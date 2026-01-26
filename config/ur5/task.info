@@ -22,32 +22,33 @@ model_settings
 ; DDP settings
 ddp
 {
-  algorithm                       SLQ
+  algorithm                       SLQ // SLQ, ILQR
 
-  nThreads                        3
+  nThreads                        4
   threadPriority                  50
 
-  maxNumIterations                1
+  maxNumIterations                1 // 1; 10
   minRelCost                      0.1
-  constraintTolerance             1e-3
+  constraintTolerance             5e-3
 
-  displayInfo                     false
-  displayShortSummary             false
-  checkNumericalStability         false
-  debugPrintRollout               false
-  debugCaching                    false
+  displayInfo                     false // false; true
+  displayShortSummary             false // false; true
+  checkNumericalStability         false // false; true
+  debugPrintRollout               false // false; true
+  debugCaching                    false // false; true
 
   AbsTolODE                       1e-5
   RelTolODE                       1e-3
-  maxNumStepsPerSecond            100000
-  timeStep                        1e-3
+  maxNumStepsPerSecond            10000
+  timeStep                        0.01 // 0.0125, 80 [Hz], 0.01, 100 [Hz]
   backwardPassIntegratorType      ODE45
 
   constraintPenaltyInitialValue   20.0
   constraintPenaltyIncreaseRate   2.0
 
   preComputeRiccatiTerms          true
-  useFeedbackPolicy               false
+
+  useFeedbackPolicy               true // false; true
 
   strategy                        LINE_SEARCH
   lineSearch
@@ -55,8 +56,30 @@ ddp
     minStepLength                 1e-2
     maxStepLength                 1.0
     hessianCorrectionStrategy     DIAGONAL_SHIFT
-    hessianCorrectionMultiple     1e-3
+    hessianCorrectionMultiple     1e-5
   }
+}
+
+; Multiple_Shooting SQP settings
+sqp
+{
+  nThreads                              4
+  dt                                    0.01 // 0.0125, 80 [Hz], 0.01, 100 [Hz]
+  sqpIteration                          1
+  deltaTol                              1e-4
+  costTol                               1e-4
+  g_max                                 1e-2
+  g_min                                 1e-6
+  inequalityConstraintMu                0.1
+  inequalityConstraintDelta             5.0
+  projectStateInputEqualityConstraints  true
+  printSolverStatistics                 true
+  printSolverStatus                     false
+  printLinesearch                       false
+  useFeedbackPolicy                     true
+  integratorType                        RK2
+  threadPriority                        50
+  logFilePath                           /tmp/ocs2/sqp_log/
 }
 
 ; Rollout settings
@@ -64,48 +87,23 @@ rollout
 {
   AbsTolODE                       1e-5
   RelTolODE                       1e-3
-  timeStep                        1e-2
+  timeStep                        0.01 // 0.0125, 80 [Hz], 0.01, 100 [Hz]
   integratorType                  ODE45
-  maxNumStepsPerSecond            100000
+  maxNumStepsPerSecond            10000
   checkNumericalStability         false
 }
 
 ; MPC settings
 mpc
 {
-  timeHorizon                     1.0   ; [s]
-  solutionTimeWindow              0.2   ; [s]
+  timeHorizon                     2.0   ; [s] // 1.0, 2.0
+  solutionTimeWindow              0.2   ; [s] // 0.2, 0.4, -1 maximum [s]
   coldStart                       false
-
+  
   debugPrint                      false
 
-  mpcDesiredFrequency             100   ; [Hz]
-  mrtDesiredFrequency             400   ; [Hz]
-}
-
-; SQP settings (multiple shooting)
-sqp
-{
-  nThreads                              3
-  dt                                    0.01
-  sqpIteration                          1
-  deltaTol                              1e-4
-  costTol                               1e-4
-
-  g_max                                 1e6
-  g_min                                 1e-6
-  inequalityConstraintMu                0.0
-  inequalityConstraintDelta             1e-6
-
-  projectStateInputEqualityConstraints  true
-  useFeedbackPolicy                     true
-  integratorType                        RK2
-
-  printSolverStatistics                 true
-  printSolverStatus                     false
-  printLinesearch                       false
-
-  logFilePath                           /tmp/ocs2/sqp_log/
+  mpcDesiredFrequency             100   ; [Hz] // 80, 100, -1 (negative for best effort policy rollout!)
+  mrtDesiredFrequency             250   ; [Hz] // 500
 }
 
 ; initial state
@@ -222,9 +220,26 @@ finalEndEffector
 }
 
 selfCollision
-{
+{ 
   ; activate self-collision constraint
-  activate  false
+  activate  true // false; true
+
+  ; Self Collision raw object pairs
+  collisionObjectPairs
+  {
+    [0] "1, 3"
+  }
+
+  ; minimum distance allowed between the pairs
+  minimumDistance  0.1
+
+  ; relaxed log barrier mu
+  mu     0.01
+
+  ; relaxed log barrier delta
+  delta  0.001
+  
+  ; TODO: Replace the collision meshes of the arm with primitive shapes.
 }
 
 ; Only applied for arm joints: limits parsed from URDF
