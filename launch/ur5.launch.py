@@ -1,65 +1,46 @@
-
 import os
+
+import launch
 import yaml
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, RegisterEventHandler
-from launch.conditions import IfCondition
-from launch.event_handlers import OnProcessStart
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution, PythonExpression
-
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterFile, ParameterValue
 from launch_ros.substitutions import FindPackageShare
-from ament_index_python.packages import get_package_share_directory
 
 
 def generate_launch_description():
     mpc_share = FindPackageShare("mpc_controller")
     mpc_share_dir = get_package_share_directory("mpc_controller")
-    initial_pose_default = os.path.join(mpc_share_dir, "config", "ridgeback_ur5", "initial_pose.yaml")
-    try:
-        with open(initial_pose_default, "r") as f:
-            initial_pose_cfg = yaml.safe_load(f) or {}
-    except Exception:
-        initial_pose_cfg = {}
-    base_cfg = (initial_pose_cfg.get("base") or {})
-    base_x_default = str(base_cfg.get("x", 0.0))
-    base_y_default = str(base_cfg.get("y", 0.0))
-    base_yaw_default = str(base_cfg.get("yaw", 0.0))
 
+    initial_pose_default = os.path.join(mpc_share_dir, "config", "ur5", "initial_pose.yaml")
+    rviz_default = os.path.join(mpc_share_dir, "config", "rviz", "manipulator.rviz")
 
-    rviz_default = os.path.join(mpc_share_dir, "config", "rviz", "mobile_manipulator.rviz")
-    task_default = PathJoinSubstitution([mpc_share, "config", "ridgeback_ur5", "task.info"])
-    urdf_default = PathJoinSubstitution([mpc_share, "description", "ridgeback_ur5", "urdf", "ridgeback_ur5.urdf"])
-    controllers_default = PathJoinSubstitution(
-        [mpc_share, "config", "ridgeback_ur5", "ros2_controllers.yaml"]
-    )
-    arm_control_xacro = PathJoinSubstitution(
-        [mpc_share, "description", "ridgeback_ur5", "urdf", "ur5.ros2_control.xacro"]
-    )
+    task_default = PathJoinSubstitution([mpc_share, "config", "ur5", "task.info"])
+    urdf_default = PathJoinSubstitution([mpc_share, "description", "ur5", "urdf", "ur5.urdf"])
+    controllers_default = PathJoinSubstitution([mpc_share, "config", "ur5", "ros2_controllers.yaml"])
+    arm_control_xacro = PathJoinSubstitution([mpc_share, "description", "ur5", "urdf", "ur5.ros2_control.xacro"])
 
     declared_arguments = [
         DeclareLaunchArgument("rviz", default_value="true"),
         DeclareLaunchArgument("rvizconfig", default_value=rviz_default),
         DeclareLaunchArgument("use_fake_hardware", default_value="true"),
-        DeclareLaunchArgument("use_fake_odom", default_value="true"),
         DeclareLaunchArgument("solver", default_value="ddp", description="MPC solver: ddp or sqp"),
         DeclareLaunchArgument("taskFile", default_value=task_default),
         DeclareLaunchArgument("urdfFile", default_value=urdf_default),
-        DeclareLaunchArgument("libFolder", default_value="/tmp/ocs2_auto_generated/ridgeback_ur5"),
+        DeclareLaunchArgument("libFolder", default_value="/tmp/ocs2_auto_generated/ur5"),
         DeclareLaunchArgument("loopMode", default_value="auto", description="auto / sync / rt"),
         DeclareLaunchArgument("mpcFreq", default_value="100", description="MPC update frequency (should be integer)"),
         DeclareLaunchArgument("mrtFreq", default_value="250", description="MRT update frequency (should be integer)"),
         DeclareLaunchArgument("perfLogPeriod", default_value="2.0", description="Performance log period [sec]"),
         DeclareLaunchArgument("controllersFile", default_value=controllers_default),
-        DeclareLaunchArgument("globalFrame", default_value="odom"),
+        DeclareLaunchArgument("globalFrame", default_value="root"),
         DeclareLaunchArgument("baseCmdTopic", default_value="/cmd_vel"),
         DeclareLaunchArgument("odomTopic", default_value="/odom"),
         DeclareLaunchArgument("initialPoseFile", default_value=initial_pose_default),
-        DeclareLaunchArgument("baseX0", default_value=base_x_default),
-        DeclareLaunchArgument("baseY0", default_value=base_y_default),
-        DeclareLaunchArgument("baseYaw0", default_value=base_yaw_default),
         DeclareLaunchArgument("commandType", default_value="marker"),
     ]
 
@@ -76,9 +57,7 @@ def generate_launch_description():
             LaunchConfiguration("initialPoseFile"),
         ]
     )
-    robot_description = {
-        "robot_description": ParameterValue(robot_description_content, value_type=str)
-    }
+    robot_description = {"robot_description": ParameterValue(robot_description_content, value_type=str)}
 
     ros2_control_node = Node(
         package="controller_manager",
@@ -91,28 +70,28 @@ def generate_launch_description():
     )
 
     controller_sequence_script = PathJoinSubstitution(
-        [FindPackageShare('mpc_controller'), 'launch', 'controller_sequence.py']
+        [FindPackageShare("mpc_controller"), "launch", "controller_sequence.py"]
     )
 
     controller_sequence = ExecuteProcess(
         cmd=[
-            'python3',
+            "python3",
             controller_sequence_script,
-            '--controller-manager',
-            '/controller_manager',
-            '--robot-description-topic',
-            '/robot_description',
-            '--timeout',
-            '120',
+            "--controller-manager",
+            "/controller_manager",
+            "--robot-description-topic",
+            "/robot_description",
+            "--timeout",
+            "120",
         ],
-        output='screen',
+        output="screen",
     )
 
     # MPC node: select executable based on solver argument
     mpc_solver = LaunchConfiguration("solver")
-    mpc_executable_name = PythonExpression([
-        "'mobile_manipulator_mpc_node' if '", mpc_solver, "' == 'ddp' else 'mobile_manipulator_sqp_mpc_node'"
-    ])
+    mpc_executable_name = PythonExpression(
+        ["'mobile_manipulator_mpc_node' if '", mpc_solver, "' == 'ddp' else 'mobile_manipulator_sqp_mpc_node'"]
+    )
 
     mpc_node = Node(
         package="mpc_controller",
@@ -128,44 +107,8 @@ def generate_launch_description():
         ],
     )
 
-    fake_odom_node = Node(
-        package="mpc_controller",
-        executable="fake_base_odom_node",
-        name="fake_base_odom",
-        output="screen",
-        condition=IfCondition(LaunchConfiguration("use_fake_odom")),
-        parameters=[
-            {
-                "cmd_vel_topic": LaunchConfiguration("baseCmdTopic"),
-                "odom_topic": LaunchConfiguration("odomTopic"),
-                "frame_id": LaunchConfiguration("globalFrame"),
-                "child_frame_id": "base_link",
-                "publish_rate": ParameterValue(LaunchConfiguration("mrtFreq"), value_type=float),
-                "x0": LaunchConfiguration("baseX0"),
-                "y0": LaunchConfiguration("baseY0"),
-                "yaw0": LaunchConfiguration("baseYaw0"),
-            }
-        ],
-    )
-
-    world_tf_node = Node(
-        package="tf2_ros",
-        executable="static_transform_publisher",
-        name="world_to_global_frame",
-        output="screen",
-        condition=IfCondition(LaunchConfiguration("use_fake_odom")),
-        arguments=[
-            "0", "0", "0", "0", "0", "0",
-            "world", LaunchConfiguration("globalFrame"),
-        ],
-    )
-
-    # Command interface launcher (marker / twist / trajectory)
     command_type = LaunchConfiguration("commandType")
-
-    command_dir = PathJoinSubstitution(
-        [FindPackageShare("mpc_controller"), "launch", "command"]
-    )
+    command_dir = PathJoinSubstitution([FindPackageShare("mpc_controller"), "launch", "command"])
     command_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([
@@ -191,13 +134,10 @@ def generate_launch_description():
         }.items(),
     )
 
-
     return LaunchDescription(
         declared_arguments
         + [
-            world_tf_node,
             visualize_launch,
-            fake_odom_node,
             mpc_node,
             ros2_control_node,
             controller_sequence,

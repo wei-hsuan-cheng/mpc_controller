@@ -1,0 +1,11 @@
+arm_joints:
+  ur_arm_shoulder_pan_joint: 0.0
+  ur_arm_shoulder_lift_joint: -1.5708
+  ur_arm_elbow_joint: 1.5708
+  ur_arm_wrist_1_joint: 3.1416
+  ur_arm_wrist_2_joint: -1.5708
+  ur_arm_wrist_3_joint: 0.0
+base:
+  x: 0.0
+  y: 0.0
+  yaw: 0.0

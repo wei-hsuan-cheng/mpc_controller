@@ -35,15 +35,26 @@ colcon build --symlink-install \
   && . install/setup.bash
 ```
 
+[`ur5`](./launch/ur5.launch.py)
 ```bash
-# E.g., Ridgeback + UR5 mobile manipulator
+# Fixed-base UR5 (no mobile base)
+ros2 launch mpc_controller ur5.launch.py \
+  solver:=ddp \
+  commandType:=marker \
+  use_fake_hardware:=true
+# sovler:=ddp, sqp
+# commandType:=marker, twist, trajectory
+```
+
+[`ridgeback_ur5`](./launch/ridgeback_ur5.launch.py)
+```bash
+# Ridgeback + UR5 mobile manipulator
 ros2 launch mpc_controller ridgeback_ur5.launch.py \
   solver:=ddp \
   commandType:=marker \
   use_fake_hardware:=true
 # sovler:=ddp, sqp
 # commandType:=marker, twist, trajectory
-# use_fake_hardware:=true, false
 ```
 
 If you built [`ocs2_ros2`](https://github.com/wei-hsuan-cheng/ocs2_ros2) in another workspace, source it **before** running the commands above (so their messages and plugins are discoverable).
@@ -53,6 +64,7 @@ If you built [`ocs2_ros2`](https://github.com/wei-hsuan-cheng/ocs2_ros2) in anot
 Key parameters are specified in [`task.info`](./config/ridgeback_ur5/task.info) and [`ros2_controllers.yaml`](./config/ridgeback_ur5/ros2_controllers.yaml).
 
 ```bash
+
 auto_generated/   -> pre-built OCS2 libraries (CppAD) for robot
 config/           -> ros2_control YAML + task files
 description/      -> xacro/urdf assets (ros2_control settings included)

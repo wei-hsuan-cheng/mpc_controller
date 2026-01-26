@@ -175,27 +175,6 @@ def start_ros2_controllers(node, controller_list, activate=True):
             return False
     return True
 
-def start_secondary_controllers(node):
-    for name in ['admittance_controller', 'panda_hand_controller', 'force_torque_broadcaster']:
-        if not node.ensure_loaded(name):
-            return False
-        if not node.ensure_configured(name):
-            return False
-        if not node.activate(name):
-            return False
-    return True
-
-
-def start_panda_arm_controller(node):
-    if not node.ensure_loaded('panda_arm_controller'):
-        return False
-    if not node.ensure_configured('panda_arm_controller'):
-        return False
-    if not node.activate('panda_arm_controller'):
-        return False
-    return True
-
-
 def prepare_servo_controller(node):
     # Servo stays inactive by design; only load+configure here.
     if not node.ensure_loaded('servo_controller'):

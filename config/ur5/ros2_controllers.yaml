@@ -1,0 +1,50 @@
+controller_manager:
+  ros__parameters:
+    update_rate: $(var mrtFreq)  # e.g. 250 [Hz]; should be integer
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    mpc_controller:
+      type: mpc_controller/OCS2Controller
+
+mpc_controller:
+  ros__parameters:
+    update_rate: $(var mrtFreq) # e.g. 250 [Hz]; should be integer
+
+    # OCS2 inputs (substituted by launch when loaded with allow_substs=True)
+    taskFile: "$(var taskFile)"
+    urdfFile: "$(var urdfFile)"
+    libFolder: "$(var libFolder)"
+
+    # Policy / timing parameters
+    loopMode: "$(var loopMode)"                 # auto / synchronized(sync) / realtime(rt)
+    mpcDesiredFrequency: $(var mpcFreq)         # e.g. 100 [Hz]
+    mrtDesiredFrequency: $(var mrtFreq)         # e.g. 250 [Hz]
+    policyTimeToleranceFactor: 5.0              # 0.0~10.0, policy must start within this fraction of dt
+    maxPolicyWaitSeconds: 0.0                   # 0=auto (automatically provide ~2 MPC periods of safety net)
+
+    # Performance logging
+    perfLogPeriod: $(var perfLogPeriod)  # [sec]
+
+    # Frames / timing
+    globalFrame: "$(var globalFrame)"
+    futureTimeOffset: 0.0
+    commandSmoothingAlpha: 1.0
+
+    # Joint mapping (must match the URDF joint names)
+    arm_joints:
+      - ur_arm_shoulder_pan_joint
+      - ur_arm_shoulder_lift_joint
+      - ur_arm_elbow_joint
+      - ur_arm_wrist_1_joint
+      - ur_arm_wrist_2_joint
+      - ur_arm_wrist_3_joint
+
+    # Base IO (unused for manipulatorModelType=0)
+    base_cmd_topic: "$(var baseCmdTopic)"
+    odom_topic: "$(var odomTopic)"
+
+    # Arm command mode
+    use_moveit_servo: false
+    joint_jog_topic: /servo_controller/delta_joint_cmds

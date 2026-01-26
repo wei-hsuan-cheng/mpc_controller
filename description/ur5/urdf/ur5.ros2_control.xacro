@@ -1,0 +1,118 @@
+<?xml version="1.0"?>
+<robot name="ur5" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:arg name="use_fake_hardware" default="true"/>
+  <xacro:arg name="initial_pose_file" default=""/>
+
+  <xacro:property name="use_fake_hardware" value="$(arg use_fake_hardware)"/>
+
+  <xacro:property name="initial_pose_file" value="$(arg initial_pose_file)"/>
+  <xacro:property name="initial_pose" value="${xacro.load_yaml(initial_pose_file)}"/>
+  <xacro:property name="arm_init" value="${initial_pose['arm_joints']}"/>
+
+  <!-- Minimal kinematic chain for ros2_control (joint names must match the URDF used by OCS2) -->
+  <link name="base_link"/>
+  <link name="ur_arm_link_1"/>
+  <link name="ur_arm_link_2"/>
+  <link name="ur_arm_link_3"/>
+  <link name="ur_arm_link_4"/>
+  <link name="ur_arm_link_5"/>
+  <link name="ur_arm_link_6"/>
+
+  <joint name="ur_arm_shoulder_pan_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="ur_arm_link_1"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-6.283" upper="6.283" effort="10" velocity="3"/>
+  </joint>
+
+  <joint name="ur_arm_shoulder_lift_joint" type="revolute">
+    <parent link="ur_arm_link_1"/>
+    <child link="ur_arm_link_2"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-6.283" upper="6.283" effort="10" velocity="3"/>
+  </joint>
+
+  <joint name="ur_arm_elbow_joint" type="revolute">
+    <parent link="ur_arm_link_2"/>
+    <child link="ur_arm_link_3"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-6.283" upper="6.283" effort="10" velocity="3"/>
+  </joint>
+
+  <joint name="ur_arm_wrist_1_joint" type="revolute">
+    <parent link="ur_arm_link_3"/>
+    <child link="ur_arm_link_4"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-6.283" upper="6.283" effort="10" velocity="3"/>
+  </joint>
+
+  <joint name="ur_arm_wrist_2_joint" type="revolute">
+    <parent link="ur_arm_link_4"/>
+    <child link="ur_arm_link_5"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-6.283" upper="6.283" effort="10" velocity="3"/>
+  </joint>
+
+  <joint name="ur_arm_wrist_3_joint" type="revolute">
+    <parent link="ur_arm_link_5"/>
+    <child link="ur_arm_link_6"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-6.283" upper="6.283" effort="10" velocity="3"/>
+  </joint>
+
+  <ros2_control name="Ur5ArmSystem" type="system">
+    <hardware>
+      <xacro:if value="${use_fake_hardware}">
+        <plugin>mock_components/GenericSystem</plugin>
+        <param name="mock_sensor_commands">false</param>
+        <param name="calculate_dynamics">true</param>
+        <param name="position_state_following_offset">0.0</param>
+      </xacro:if>
+    </hardware>
+
+    <joint name="ur_arm_shoulder_pan_joint">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${arm_init['ur_arm_shoulder_pan_joint']}</param>
+      </state_interface>
+    </joint>
+    <joint name="ur_arm_shoulder_lift_joint">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${arm_init['ur_arm_shoulder_lift_joint']}</param>
+      </state_interface>
+    </joint>
+    <joint name="ur_arm_elbow_joint">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${arm_init['ur_arm_elbow_joint']}</param>
+      </state_interface>
+    </joint>
+    <joint name="ur_arm_wrist_1_joint">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${arm_init['ur_arm_wrist_1_joint']}</param>
+      </state_interface>
+    </joint>
+    <joint name="ur_arm_wrist_2_joint">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${arm_init['ur_arm_wrist_2_joint']}</param>
+      </state_interface>
+    </joint>
+    <joint name="ur_arm_wrist_3_joint">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${arm_init['ur_arm_wrist_3_joint']}</param>
+      </state_interface>
+    </joint>
+  </ros2_control>
+
+</robot>
