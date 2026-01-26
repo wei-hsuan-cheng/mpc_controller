@@ -33,7 +33,7 @@ def generate_launch_description():
         DeclareLaunchArgument("trajectoryAxisY", default_value=str(axis_defaults.get("y", 0.0))),
         DeclareLaunchArgument("trajectoryAxisZ", default_value=str(axis_defaults.get("z", 1.0))),
         DeclareLaunchArgument(
-            "trajectoryGlobalFrame",
+            "globalFrame",
             default_value=str(default_global_frame),
             description="Frame used for trajectory target markers.",
         ),
@@ -59,7 +59,7 @@ def generate_launch_description():
             "axisX": LaunchConfiguration("trajectoryAxisX"),
             "axisY": LaunchConfiguration("trajectoryAxisY"),
             "axisZ": LaunchConfiguration("trajectoryAxisZ"),
-            "trajectoryGlobalFrame": LaunchConfiguration("trajectoryGlobalFrame"),
+            "trajectoryGlobalFrame": LaunchConfiguration("globalFrame"),
         }],
         output="screen",
     )
