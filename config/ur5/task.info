@@ -206,6 +206,23 @@ inputCost
   }
 }
 
+jointTracking
+{
+  activate  false
+  mu        20.0
+
+  ; ARM ONLY reference (size = armDim)
+  reference
+  {
+    (0,0)   0.0
+    (1,0)  -1.5708
+    (2,0)   1.5708
+    (3,0)   3.1416
+    (4,0)  -1.5708
+    (5,0)   0.0
+  }
+}
+
 endEffector
 {
   ; end effector quadratic penalty scaling
