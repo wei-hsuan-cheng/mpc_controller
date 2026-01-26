@@ -108,6 +108,30 @@ Model type selection:
 - `manipulatorModelType=0` for a standard fixed-base arm. 
 - `manipulatorModelType=1/2/3` when you want the base to be mobile/floating (wheel-based or free-floating), while keeping the same arm/EE frames from your URDF.
 
+## Mode schedule
+Switch between joint, base, EE, tracking, or custom blending modes by topic.
+```bash
+# Echo current mode
+ros2 topic echo /mobile_manipulator_mode_schedule
+# E.g., switch to mode 2
+ros2 topic pub -1 /mobile_manipulator_mode_schedule ocs2_msgs/msg/ModeSchedule "{event_times: [], mode_sequence: [2]}"
+```
+
+Details of the mode schedule:
+```bash
+; Each entry defines weights for a specific mode number.
+; Two supported syntaxes:
+;   [0] "mode alphaEe alphaBase alphaJoint"
+;   [0] { mode 0 alphaEe 0 alphaBase 1 alphaJoint 0 }
+modeWeights
+{
+  [0] "0  0.0  0.0  1.0"  ; joint-only
+  [1] "1  0.0  1.0  0.0"  ; base-only
+  [2] "2  1.0  0.0  0.0"  ; EE-only
+  [3] "3  1.0  1.0  0.0"  ; base + EE
+}
+```
+
 ## MPC rollout topic
 
 ```bash

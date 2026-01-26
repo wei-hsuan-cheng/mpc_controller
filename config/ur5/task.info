@@ -208,7 +208,7 @@ inputCost
 
 jointTracking
 {
-  activate  false
+  activate  true
   mu        20.0
 
   ; ARM ONLY reference (size = armDim)
@@ -236,6 +236,36 @@ finalEndEffectorTracking
   activate          true
   muPosition       10.0 // 10.0, 50.0, 5.0
   muOrientation    05.0 // 5.0, 25.0, 2.5
+}
+
+; Optional mode-based blending of tracking constraints (does not override the per-constraint `activate` flags).
+; Weights are applied at runtime via the modeSchedule (modeAtTime(t)):
+;   jointTracking residual is scaled by alphaJoint
+;   endEffectorTracking residual is scaled by alphaEe
+; Note: This UR5 config has no base, so alphaBase is unused (keep it 0).
+; If a constraint's `activate` is false, it is not added at all (always off).
+referenceBlending
+{
+  normalize   true
+  eps         1e-9
+
+  default
+  {
+    alphaEe     1.0
+    alphaBase   0.0
+    alphaJoint  0.0
+  }
+
+  ; Each entry defines weights for a specific mode number.
+  ; Two supported syntaxes:
+  ;   [0] "mode alphaEe alphaBase alphaJoint"
+  ;   [0] { mode 0 alphaEe 0 alphaBase 0 alphaJoint 1 }
+  modeWeights
+  {
+    [0] "0  0.0  0.0  1.0"  ; joint-only
+    [1] "1  1.0  0.0  0.0"  ; EE-only
+    [2] "2  1.0  0.0  1.0"  ; joint + EE (normalized if normalize=true)
+  }
 }
 
 selfCollision
