@@ -41,10 +41,6 @@ mpc_controller:
       - ur_arm_wrist_2_joint
       - ur_arm_wrist_3_joint
 
-    # Base IO (unused for manipulatorModelType=0)
-    base_cmd_topic: "$(var baseCmdTopic)"
-    odom_topic: "$(var odomTopic)"
-
     # Arm command mode
     use_moveit_servo: false
     joint_jog_topic: /servo_controller/delta_joint_cmds
