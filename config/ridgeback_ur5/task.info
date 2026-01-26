@@ -259,6 +259,7 @@ baseTracking
 
 endEffector
 {
+  activate          true
   ; end effector quadratic penalty scaling
   muPosition       10.0 // 10.0, 50.0, 5.0
   muOrientation    05.0 // 5.0, 25.0, 2.5
@@ -266,6 +267,7 @@ endEffector
 
 finalEndEffector
 {
+  activate          true
   muPosition       10.0 // 10.0, 50.0, 5.0
   muOrientation    05.0 // 5.0, 25.0, 2.5
 }
