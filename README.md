@@ -126,9 +126,10 @@ Details of the mode schedule:
 modeWeights
 {
   [0] "0  0.0  0.0  1.0"  ; joint-only
-  [1] "1  0.0  1.0  0.0"  ; base-only
-  [2] "2  1.0  0.0  0.0"  ; EE-only
-  [3] "3  1.0  1.0  0.0"  ; base + EE
+  [1] "1  1.0  0.0  0.0"  ; EE-only
+  [2] "2  1.0  0.0  1.0"  ; joint + EE
+  [3] "3  0.0  1.0  0.0"  ; base-only
+  [4] "4  1.0  1.0  0.0"  ; base + EE
 }
 ```
 

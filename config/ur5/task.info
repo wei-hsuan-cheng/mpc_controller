@@ -251,9 +251,9 @@ referenceBlending
 
   default
   {
-    alphaEe     1.0
+    alphaEe     0.0
     alphaBase   0.0
-    alphaJoint  0.0
+    alphaJoint  1.0
   }
 
   ; Each entry defines weights for a specific mode number.
@@ -264,7 +264,7 @@ referenceBlending
   {
     [0] "0  0.0  0.0  1.0"  ; joint-only
     [1] "1  1.0  0.0  0.0"  ; EE-only
-    [2] "2  1.0  0.0  1.0"  ; joint + EE (normalized if normalize=true)
+    [2] "2  1.0  0.0  1.0"  ; joint + EE
   }
 }
 
