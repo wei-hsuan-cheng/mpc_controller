@@ -119,19 +119,33 @@ ros2 topic pub -1 /mobile_manipulator_mode_schedule ocs2_msgs/msg/ModeSchedule "
 
 Details of the mode schedule:
 ```bash
-; Each entry defines weights for a specific mode number.
-; Two supported syntaxes:
-;   [0] "mode alphaEe alphaBase alphaJoint"
-;   [0] { mode 0 alphaEe 0 alphaBase 1 alphaJoint 0 }
-modeWeights
+referenceBlending
 {
-  [0] "0  0.0  0.0  1.0"  ; joint-only
-  [1] "1  1.0  0.0  0.0"  ; EE-only
-  [2] "2  1.0  0.0  1.0"  ; joint + EE
-  [3] "3  0.0  1.0  0.0"  ; base-only
-  [4] "4  1.0  1.0  0.0"  ; base + EE
+  normalize   true
+  eps         1e-9
+
+  default
+  {
+    alphaEe     0.0
+    alphaBase   0.0
+    alphaJoint  1.0
+  }
+
+  ; Each entry defines weights for a specific mode number.
+  ; Two supported syntaxes:
+  ;   [0] "mode alphaEe alphaBase alphaJoint"
+  ;   [0] { mode 0 alphaEe 0 alphaBase 1 alphaJoint 0 }
+  modeWeights
+  {
+    [0] "0  0.0  0.0  1.0"  ; joint-only
+    [1] "1  1.0  0.0  0.0"  ; EE-only
+    [2] "2  1.0  0.0  1.0"  ; joint + EE
+    [3] "3  0.0  1.0  0.0"  ; base-only
+    [4] "4  1.0  1.0  0.0"  ; base + EE
+  }
 }
 ```
+Note that `modeWeights=3,4` are only for floating-base manipulator.
 
 ## MPC rollout topic
 
