@@ -145,7 +145,7 @@ referenceBlending
   }
 }
 ```
-Note that `modeWeights=3,4` are only for floating-base manipulator.
+Note that `modeWeights=3/4` are only for floating-base manipulator.
 
 ## MPC rollout topic
 
