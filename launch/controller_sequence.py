@@ -215,7 +215,7 @@ def main():
         'mpc_controller', 
     ]
     
-    if not start_ros2_controllers(node, controller_list, activate=True):
+    if not start_ros2_controllers(node, controller_list, activate=False):
         rclpy.shutdown()
         return 1
 
