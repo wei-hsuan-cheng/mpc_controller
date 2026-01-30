@@ -43,7 +43,7 @@ ros2 launch mpc_controller ur5.launch.py \
   commandType:=marker \
   use_fake_hardware:=true
 # sovler:=ddp, sqp
-# commandType:=marker, twist, trajectory
+# commandType:=marker, twist, trajectory, joint_trajectory
 ```
 
 [`ridgeback_ur5`](./launch/ridgeback_ur5.launch.py)
@@ -54,7 +54,7 @@ ros2 launch mpc_controller ridgeback_ur5.launch.py \
   commandType:=marker \
   use_fake_hardware:=true
 # sovler:=ddp, sqp
-# commandType:=marker, twist, trajectory
+# commandType:=marker, twist, trajectory, joint_trajectory
 ```
 
 If you built [`ocs2_ros2`](https://github.com/wei-hsuan-cheng/ocs2_ros2) in another workspace, source it **before** running the commands above (so their messages and plugins are discoverable).
@@ -119,8 +119,8 @@ Switch between joint, base, EE, tracking, or custom blending modes by topic.
 ```bash
 # Echo current mode
 ros2 topic echo /mobile_manipulator_mode_schedule
-# E.g., switch to mode 2
-ros2 topic pub -1 /mobile_manipulator_mode_schedule ocs2_msgs/msg/ModeSchedule "{event_times: [], mode_sequence: [2]}"
+# E.g., switch to mode 1
+ros2 topic pub -1 /mobile_manipulator_mode_schedule ocs2_msgs/msg/ModeSchedule "{event_times: [], mode_sequence: [1]}"
 ```
 
 Details of the mode schedule:

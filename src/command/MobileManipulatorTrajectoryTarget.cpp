@@ -35,6 +35,9 @@
 #include <pinocchio/algorithm/frames.hpp>
 #include <pinocchio/algorithm/kinematics.hpp>
 
+#include <tf2_ros/transform_broadcaster.h>
+#include <geometry_msgs/msg/transform_stamped.hpp>
+
 using namespace ocs2;
 using namespace ocs2::mobile_manipulator;
 
@@ -47,7 +50,7 @@ struct Params {
   double frequency_hz = 0.1;
 };
 
-inline void orthonormalBasisFromAxis(const Eigen::Vector3d &axis_unit, Eigen::Vector3d &u, Eigen::Vector3d &v) {
+inline void orthonormalBasisFromAxis(const Eigen::Vector3d& axis_unit, Eigen::Vector3d& u, Eigen::Vector3d& v) {
   Eigen::Vector3d ref = (std::abs(axis_unit.z()) < 0.9) ? Eigen::Vector3d::UnitZ() : Eigen::Vector3d::UnitX();
   u = axis_unit.cross(ref);
   double n = u.norm();
@@ -60,10 +63,10 @@ inline void orthonormalBasisFromAxis(const Eigen::Vector3d &axis_unit, Eigen::Ve
   v = axis_unit.cross(u);
 }
 
-inline void eightShapeTrajectory(const Eigen::Vector3d &center_p, const Eigen::Quaterniond &q0,
-                                 const Eigen::Vector3d &plane_axis_unit, double start_time, double t0, int N,
-                                 double dt, double amp, double freq_hz, scalar_array_t &timeTraj,
-                                 vector_array_t &stateTraj) {
+inline void eightShapeTrajectory(const Eigen::Vector3d& center_p, const Eigen::Quaterniond& q0,
+                                 const Eigen::Vector3d& plane_axis_unit, double start_time, double t0, int N,
+                                 double dt, double amp, double freq_hz, scalar_array_t& timeTraj,
+                                 vector_array_t& stateTraj) {
   const double omega = 2.0 * M_PI * freq_hz;
   Eigen::Vector3d u, v;
   orthonormalBasisFromAxis(plane_axis_unit, u, v);
@@ -83,11 +86,11 @@ inline void eightShapeTrajectory(const Eigen::Vector3d &center_p, const Eigen::Q
     stateTraj.push_back(std::move(target));
   }
 }
-} // namespace
+}  // namespace
 
 class TrajectoryTargetNode : public rclcpp::Node {
  public:
-  explicit TrajectoryTargetNode(const rclcpp::NodeOptions &options)
+  explicit TrajectoryTargetNode(const rclcpp::NodeOptions& options)
       : Node("mobile_manipulator_trajectory_target", options) {
     this->declare_parameter<std::string>("taskFile", "");
     this->declare_parameter<std::string>("urdfFile", "");
@@ -121,16 +124,17 @@ class TrajectoryTargetNode : public rclcpp::Node {
     axis_.normalize();
     trajectory_global_frame_ = this->get_parameter("trajectoryGlobalFrame").as_string();
 
+    tfBroadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+
     if (!taskFile_.empty() && !urdfFile_.empty() && !libFolder_.empty()) {
       try {
         interface_ = std::make_unique<MobileManipulatorInterface>(taskFile_, libFolder_, urdfFile_);
-      } catch (const std::exception &e) {
+      } catch (const std::exception& e) {
         RCLCPP_WARN(this->get_logger(), "Failed to create MobileManipulatorInterface: %s", e.what());
       }
     }
 
-    targetPub_ = this->create_publisher<ocs2_msgs::msg::MpcTargetTrajectories>(
-        robotName_ + std::string("_mpc_target"), 1);
+    targetPub_ = this->create_publisher<ocs2_msgs::msg::MpcTargetTrajectories>(robotName_ + std::string("_mpc_ee_target"), 1);
     targetMarkerPub_ =
         this->create_publisher<visualization_msgs::msg::MarkerArray>("/mobile_manipulator/targetStateTrajectory", 1);
     targetPosePub_ =
@@ -147,7 +151,7 @@ class TrajectoryTargetNode : public rclcpp::Node {
     const auto period = std::chrono::duration<double>(1.0 / std::max(1e-6, params_.publish_rate_hz));
     timer_ = this->create_wall_timer(period, std::bind(&TrajectoryTargetNode::onTimer, this));
 
-    RCLCPP_INFO(this->get_logger(), "Trajectory target node started. Publishing to %s_mpc_target at %.1f Hz",
+    RCLCPP_INFO(this->get_logger(), "Trajectory target node started. Publishing to %s_mpc_ee_target at %.1f Hz",
                 robotName_.c_str(), params_.publish_rate_hz);
   }
 
@@ -163,17 +167,17 @@ class TrajectoryTargetNode : public rclcpp::Node {
     if (!initialized_) {
       if (interface_) {
         try {
-          const auto &pin = interface_->getPinocchioInterface();
-          const auto &model = pin.getModel();
+          const auto& pin = interface_->getPinocchioInterface();
+          const auto& model = pin.getModel();
           auto data = pin.getData();
           pinocchio::forwardKinematics(model, data, obs.state);
           pinocchio::updateFramePlacements(model, data);
-          const auto &info = interface_->getManipulatorModelInfo();
+          const auto& info = interface_->getManipulatorModelInfo();
           const auto ee_id = model.getFrameId(info.eeFrame);
-          const auto &ee = data.oMf[ee_id];
+          const auto& ee = data.oMf[ee_id];
           center_p_ = ee.translation();
           q0_ = Eigen::Quaterniond(ee.rotation());
-        } catch (const std::exception &e) {
+        } catch (const std::exception& e) {
           RCLCPP_WARN(this->get_logger(), "FK failed: %s", e.what());
           center_p_.setZero();
           q0_ = Eigen::Quaterniond::Identity();
@@ -197,6 +201,23 @@ class TrajectoryTargetNode : public rclcpp::Node {
     const auto targetMsg = ros_msg_conversions::createTargetTrajectoriesMsg(traj);
     targetPub_->publish(targetMsg);
 
+    // Broadcast "command" TF as the *current* command point (front)
+    if (tfBroadcaster_ && !traj.stateTrajectory.empty()) {
+      const auto& x = traj.stateTrajectory.front();  // [px py pz qx qy qz qw]
+      geometry_msgs::msg::TransformStamped tf;
+      tf.header.stamp = this->now();
+      tf.header.frame_id = trajectory_global_frame_;
+      tf.child_frame_id = "command";
+      tf.transform.translation.x = x(0);
+      tf.transform.translation.y = x(1);
+      tf.transform.translation.z = x(2);
+
+      Eigen::Quaterniond q(x(6), x(3), x(4), x(5));  // w, x, y, z
+      q.normalize();
+      tf.transform.rotation = ros_msg_helpers::getOrientationMsg(q);
+      tfBroadcaster_->sendTransform(tf);
+    }
+
     visualization_msgs::msg::MarkerArray markerArray;
     markerArray.markers.reserve(traj.size());
     geometry_msgs::msg::PoseArray poseArray;
@@ -213,14 +234,13 @@ class TrajectoryTargetNode : public rclcpp::Node {
       marker.type = visualization_msgs::msg::Marker::SPHERE;
       marker.action = visualization_msgs::msg::Marker::ADD;
       marker.scale.x = marker.scale.y = marker.scale.z = 0.0025;
-      // const std::array<scalar_t, 3> targetTrajectoryColor{0.4660, 0.6740, 0.1880}; // green
-      // const std::array<scalar_t, 3> targetTrajectoryColor{0.9290, 0.6940, 0.1250}; // orange
       marker.color.r = 0.4660f;
       marker.color.g = 0.6740f;
       marker.color.b = 0.1880f;
       marker.color.a = 1.0f;
+
       marker.pose.position = ros_msg_helpers::getPointMsg(traj.stateTrajectory[i].head<3>());
-      const auto quat_vec = traj.stateTrajectory[i].tail<4>();
+      const auto quat_vec = traj.stateTrajectory[i].tail<4>();  // [qx qy qz qw]
       Eigen::Quaterniond quat(quat_vec[3], quat_vec[0], quat_vec[1], quat_vec[2]);
       marker.pose.orientation = ros_msg_helpers::getOrientationMsg(quat.normalized());
       markerArray.markers.push_back(marker);
@@ -248,6 +268,8 @@ class TrajectoryTargetNode : public rclcpp::Node {
   rclcpp::Subscription<ocs2_msgs::msg::MpcObservation>::SharedPtr obsSub_;
   rclcpp::TimerBase::SharedPtr timer_;
 
+  std::shared_ptr<tf2_ros::TransformBroadcaster> tfBroadcaster_;
+
   std::mutex mtx_;
   SystemObservation latestObs_;
   bool haveObs_{false};
@@ -258,7 +280,7 @@ class TrajectoryTargetNode : public rclcpp::Node {
   Eigen::Quaterniond q0_ = Eigen::Quaterniond::Identity();
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   rclcpp::NodeOptions opts;
   opts.allow_undeclared_parameters(true);

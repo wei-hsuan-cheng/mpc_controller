@@ -29,8 +29,18 @@ command:
     horizon: 5.0
     dt: 0.01
     amplitude: 0.2
-    frequency: 0.2
+    frequency: 0.02
     axis:
       x: 1.0
       y: 0.0
       z: 1.0
+  
+  joint_trajectory:
+    publish_rate: 100.0
+    horizon: 5.0
+    dt: 0.01
+    amplitude: 0.05
+    frequency: 0.02
+    nominal_joint_positions: [0.0, -1.5708, 1.5708, 3.1416, -1.5708, 0.0]
+    amplitude_per_joint: [0.0, 0.1, 0.1, 0.1, 0.1, 0.0]
+    phase_offsets: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

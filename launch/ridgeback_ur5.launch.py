@@ -160,7 +160,7 @@ def generate_launch_description():
         ],
     )
 
-    # Command interface launcher (marker / twist / trajectory)
+    # Command interface launcher (marker / twist / trajectory / joint_trajectory)
     command_type = LaunchConfiguration("commandType")
 
     command_dir = PathJoinSubstitution(

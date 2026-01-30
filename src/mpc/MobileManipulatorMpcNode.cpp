@@ -30,7 +30,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <ocs2_ddp/GaussNewtonDDP_MPC.h>
 #include <ocs2_mobile_manipulator/MobileManipulatorInterface.h>
 #include <ocs2_ros_interfaces/mpc/MPC_ROS_Interface.h>
-#include <ocs2_ros_interfaces/synchronized_module/RosReferenceManager.h>
+
+#include "mpc_controller/mpc/MobileManipulatorRosReferenceManager.h"
 
 #include "rclcpp/rclcpp.hpp"
 
@@ -56,12 +57,19 @@ int main(int argc, char **argv) {
 
   MobileManipulatorInterface interface(taskFile, libFolder, urdfFile);
 
+  // UPDATED: pass PinocchioInterface + ManipulatorModelInfo for EE-hold latch on mode switch
   auto rosReferenceManagerPtr =
-      std::make_shared<RosReferenceManager>(robotName, interface.getReferenceManagerPtr());
-  rosReferenceManagerPtr->subscribe(node);
+      std::make_shared<::mpc_controller::MobileManipulatorRosReferenceManager>(
+          node,
+          interface.getReferenceManagerPtr(),
+          robotName,
+          interface.getPinocchioInterface(),
+          interface.getManipulatorModelInfo());
 
-  GaussNewtonDDP_MPC mpc(interface.mpcSettings(), interface.ddpSettings(), interface.getRollout(),
-                         interface.getOptimalControlProblem(), interface.getInitializer());
+  GaussNewtonDDP_MPC mpc(interface.mpcSettings(), interface.ddpSettings(),
+                         interface.getRollout(),
+                         interface.getOptimalControlProblem(),
+                         interface.getInitializer());
   mpc.getSolverPtr()->setReferenceManager(rosReferenceManagerPtr);
 
   MPC_ROS_Interface mpcNode(mpc, robotName);

@@ -93,14 +93,14 @@ void MobileManipulatorVisualization::publishTargetTrajectories(const rclcpp::Tim
   }
 
   if (tf_broadcaster_) {
-    geometry_msgs::msg::TransformStamped target_tf;
-    target_tf.header = target_pose.header;
-    target_tf.child_frame_id = "command";
-    target_tf.transform.translation.x = target_pose.pose.position.x;
-    target_tf.transform.translation.y = target_pose.pose.position.y;
-    target_tf.transform.translation.z = target_pose.pose.position.z;
-    target_tf.transform.rotation = target_pose.pose.orientation;
-    tf_broadcaster_->sendTransform(target_tf);
+    // geometry_msgs::msg::TransformStamped target_tf;
+    // target_tf.header = target_pose.header;
+    // target_tf.child_frame_id = "command";
+    // target_tf.transform.translation.x = target_pose.pose.position.x;
+    // target_tf.transform.translation.y = target_pose.pose.position.y;
+    // target_tf.transform.translation.z = target_pose.pose.position.z;
+    // target_tf.transform.rotation = target_pose.pose.orientation;
+    // tf_broadcaster_->sendTransform(target_tf);
   }
 }
 

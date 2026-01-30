@@ -25,6 +25,8 @@
 #include <ocs2_mobile_manipulator/MobileManipulatorInterface.h>
 #include <ocs2_mobile_manipulator/ManipulatorModelInfo.h>  // <-- for ManipulatorModelType
 #include <ocs2_ros_interfaces/mrt/MRT_ROS_Interface.h>
+#include <ocs2_msgs/msg/mpc_target_trajectories.hpp>
+#include <ocs2_ros_interfaces/common/RosMsgConversions.h>
 
 #include "mpc_controller/visualization/MobileManipulatorVisualization.h"
 

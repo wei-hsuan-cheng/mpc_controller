@@ -27,6 +27,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ******************************************************************************/
 
+#include <chrono>
+#include <utility>
+
 #include <ocs2_ros_interfaces/command/UnifiedTargetTrajectoriesInteractiveMarker.h>
 #include <ocs2_ros_interfaces/command/JoystickMarkerWrapper.h>
 #include <ocs2_ros_interfaces/command/MarkerAutoPositionWrapper.h>
@@ -41,6 +44,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <pinocchio/algorithm/kinematics.hpp>
 #include <pinocchio/algorithm/frames.hpp>
 #include <yaml-cpp/yaml.h>
+
+#include <tf2_ros/transform_broadcaster.h>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 
 using namespace ocs2;
 using namespace ocs2::mobile_manipulator;
@@ -158,7 +164,8 @@ TargetTrajectories dualArmGoalPoseToTargetTrajectories(const Eigen::Vector3d& le
                                                        const Eigen::Quaterniond& rightOrientation,
                                                        const SystemObservation& observation) {
   const scalar_array_t timeTrajectory{observation.time};
-  const vector_t target = (vector_t(14) << leftPosition, leftOrientation.coeffs(), rightPosition, rightOrientation.coeffs()).finished();
+  const vector_t target =
+      (vector_t(14) << leftPosition, leftOrientation.coeffs(), rightPosition, rightOrientation.coeffs()).finished();
   const vector_array_t stateTrajectory{target};
   const vector_array_t inputTrajectory{vector_t::Zero(observation.input.size())};
   return {timeTrajectory, stateTrajectory, inputTrajectory};
@@ -171,6 +178,26 @@ int main(int argc, char* argv[]) {
   rclcpp::Node::SharedPtr node = rclcpp::Node::make_shared(
       robotName + "_target",
       rclcpp::NodeOptions().allow_undeclared_parameters(true).automatically_declare_parameters_from_overrides(true));
+
+  // TF broadcaster for "command"
+  auto tf_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(node);
+
+  auto publishCommandTf = [&](const std::string& parent_frame, const Eigen::Vector3d& p,
+                              const Eigen::Quaterniond& q_in) {
+    Eigen::Quaterniond q = q_in.normalized();
+    geometry_msgs::msg::TransformStamped tf;
+    tf.header.stamp = node->now();
+    tf.header.frame_id = parent_frame;
+    tf.child_frame_id = "command";
+    tf.transform.translation.x = p.x();
+    tf.transform.translation.y = p.y();
+    tf.transform.translation.z = p.z();
+    tf.transform.rotation.x = q.x();
+    tf.transform.rotation.y = q.y();
+    tf.transform.rotation.z = q.z();
+    tf.transform.rotation.w = q.w();
+    tf_broadcaster->sendTransform(tf);
+  };
 
   std::string taskFile = node->get_parameter("taskFile").as_string();
   std::string urdfFile = "";
@@ -187,20 +214,17 @@ int main(int argc, char* argv[]) {
   bool dualArmMode = readDualArmModeFromTaskFile(taskFile);
 
   bool enableDynamicFrame = false;
-  if (node->has_parameter("enableDynamicFrame"))
-  {
-      enableDynamicFrame = node->get_parameter("enableDynamicFrame").as_bool();
-      RCLCPP_INFO(node->get_logger(), "enableDynamicFrame parameter found: %s", enableDynamicFrame ? "true" : "false");
-  }
-  else
-  {
-      RCLCPP_INFO(node->get_logger(), "enableDynamicFrame parameter not found, using default: false");
+  if (node->has_parameter("enableDynamicFrame")) {
+    enableDynamicFrame = node->get_parameter("enableDynamicFrame").as_bool();
+    RCLCPP_INFO(node->get_logger(), "enableDynamicFrame parameter found: %s", enableDynamicFrame ? "true" : "false");
+  } else {
+    RCLCPP_INFO(node->get_logger(), "enableDynamicFrame parameter not found, using default: false");
   }
 
   std::string markerGlobalFrame = "";
   try {
     markerGlobalFrame = node->get_parameter("markerGlobalFrame").as_string();
-  } catch (const rclcpp::exceptions::ParameterNotDeclaredException &) {
+  } catch (const rclcpp::exceptions::ParameterNotDeclaredException&) {
     markerGlobalFrame = "world";
   }
   if (enableDynamicFrame) {
@@ -240,6 +264,7 @@ int main(int argc, char* argv[]) {
     }
     return interfacePtr->getInitialState();
   };
+  (void)getInitialStateForFk;  // kept for compatibility with your existing codebase
 
   if (dualArmMode) {
     SystemObservation latestObs;
@@ -281,6 +306,7 @@ int main(int argc, char* argv[]) {
             Eigen::Quaterniond rq(right.rotation());
             targetPoseCommand.setDualArmPose(ocs2::IMarkerControl::ArmType::RIGHT, rp, rq);
             targetPoseCommand.updateMarkerDisplay("RightArmGoal", rp, rq);
+
             markersInitialized = true;
             RCLCPP_INFO(node->get_logger(), "Initialized dual-arm markers from first MPC observation.");
           } catch (const std::exception& e) {
@@ -290,7 +316,8 @@ int main(int argc, char* argv[]) {
 
     auto srv = node->create_service<std_srvs::srv::SetBool>(
         "toggle_mpc",
-        [&](const std::shared_ptr<rmw_request_id_t> /*req_header*/, const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
+        [&](const std::shared_ptr<rmw_request_id_t> /*req_header*/,
+            const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
             std::shared_ptr<std_srvs::srv::SetBool::Response> res) {
           if (!req->data) {
             try {
@@ -303,10 +330,12 @@ int main(int argc, char* argv[]) {
                 pinocchio::forwardKinematics(model, data, latestObs.state);
                 pinocchio::updateFramePlacements(model, data);
                 const auto& info = interfacePtr->getManipulatorModelInfo();
+
                 const auto left_id = model.getFrameId(info.eeFrame);
                 const auto& left = data.oMf[left_id];
                 lp = left.translation();
                 lq = Eigen::Quaterniond(left.rotation());
+
                 const auto right_id = model.getFrameId(info.eeFrame1);
                 const auto& right = data.oMf[right_id];
                 rp = right.translation();
@@ -324,6 +353,10 @@ int main(int argc, char* argv[]) {
               targetPoseCommand.updateMarkerDisplay("LeftArmGoal", lp, lq);
               targetPoseCommand.updateMarkerDisplay("RightArmGoal", rp, rq);
               targetPoseCommand.sendDualArmTrajectories();
+
+              // Broadcast "command" TF (use LEFT arm as command)
+              publishCommandTf(markerGlobalFrame, lp, lq);
+
               res->success = true;
               res->message = "MPC paused; holding current poses";
             } catch (const std::exception& e) {
@@ -337,6 +370,16 @@ int main(int argc, char* argv[]) {
             res->success = true;
             res->message = "MPC started (continuous mode)";
           }
+        });
+
+    // Periodic "command" TF publishing so TF always matches current marker pose
+    auto tf_timer = node->create_wall_timer(
+        std::chrono::duration<double>(1.0 / std::max(1e-6, markerPublishRate)),
+        [&]() {
+          Eigen::Vector3d lp;
+          Eigen::Quaterniond lq;
+          std::tie(lp, lq) = targetPoseCommand.getDualArmPose(ocs2::IMarkerControl::ArmType::LEFT);
+          publishCommandTf(markerGlobalFrame, lp, lq);
         });
 
     if (enableJoystick) {
@@ -353,6 +396,7 @@ int main(int argc, char* argv[]) {
     }
 
     rclcpp::spin(node);
+    (void)tf_timer;
     return 0;
   }
 
@@ -397,7 +441,8 @@ int main(int argc, char* argv[]) {
 
   auto srv = node->create_service<std_srvs::srv::SetBool>(
       "toggle_mpc",
-      [&](const std::shared_ptr<rmw_request_id_t> /*req_header*/, const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
+      [&](const std::shared_ptr<rmw_request_id_t> /*req_header*/,
+          const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
           std::shared_ptr<std_srvs::srv::SetBool::Response> res) {
         if (!req->data) {
           try {
@@ -424,6 +469,10 @@ int main(int argc, char* argv[]) {
             targetPoseCommand.setSingleArmPose(p, q);
             targetPoseCommand.updateMarkerDisplay("Goal", p, q);
             targetPoseCommand.sendSingleArmTrajectories();
+
+            // Broadcast "command" TF
+            publishCommandTf(markerGlobalFrame, p, q);
+
             res->success = true;
             res->message = "MPC paused; holding current pose";
           } catch (const std::exception& e) {
@@ -437,6 +486,16 @@ int main(int argc, char* argv[]) {
           res->success = true;
           res->message = "MPC started (continuous mode)";
         }
+      });
+
+  // Periodic "command" TF publishing so TF always matches current marker pose
+  auto tf_timer = node->create_wall_timer(
+      std::chrono::duration<double>(1.0 / std::max(1e-6, markerPublishRate)),
+      [&]() {
+        Eigen::Vector3d p;
+        Eigen::Quaterniond q;
+        std::tie(p, q) = targetPoseCommand.getSingleArmPose();
+        publishCommandTf(markerGlobalFrame, p, q);
       });
 
   if (enableJoystick) {
@@ -453,5 +512,6 @@ int main(int argc, char* argv[]) {
   }
 
   rclcpp::spin(node);
+  (void)tf_timer;
   return 0;
 }

@@ -102,7 +102,7 @@ class TwistTargetNode : public rclcpp::Node {
     }
 
     targetPub_ = this->create_publisher<ocs2_msgs::msg::MpcTargetTrajectories>(
-        robotName_ + std::string("_mpc_target"), 1);
+        robotName_ + std::string("_mpc_ee_target"), 1);
 
     obsSub_ = this->create_subscription<ocs2_msgs::msg::MpcObservation>(
         robotName_ + std::string("_mpc_observation"), 1,
@@ -115,7 +115,7 @@ class TwistTargetNode : public rclcpp::Node {
     const auto period = std::chrono::duration<double>(1.0 / std::max(1e-6, params_.publish_rate_hz));
     timer_ = this->create_wall_timer(period, std::bind(&TwistTargetNode::onTimer, this));
 
-    RCLCPP_INFO(this->get_logger(), "Twist target node started. Publishing to %s_mpc_target at %.1f Hz",
+    RCLCPP_INFO(this->get_logger(), "Twist target node started. Publishing to %s_mpc_ee_target at %.1f Hz",
                 robotName_.c_str(), params_.publish_rate_hz);
   }
 

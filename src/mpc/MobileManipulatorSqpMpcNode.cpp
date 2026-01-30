@@ -30,43 +30,49 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <ocs2_sqp/SqpMpc.h>
 #include <ocs2_mobile_manipulator/MobileManipulatorInterface.h>
 #include <ocs2_ros_interfaces/mpc/MPC_ROS_Interface.h>
-#include <ocs2_ros_interfaces/synchronized_module/RosReferenceManager.h>
+
+#include "mpc_controller/mpc/MobileManipulatorRosReferenceManager.h"
 
 #include "rclcpp/rclcpp.hpp"
 
 using namespace ocs2;
 using namespace mobile_manipulator;
 
-int main(int argc, char** argv)
-{
-    const std::string robotName = "mobile_manipulator";
+int main(int argc, char** argv) {
+  const std::string robotName = "mobile_manipulator";
 
-    rclcpp::init(argc, argv);
-    rclcpp::Node::SharedPtr node = rclcpp::Node::make_shared(
-        robotName + "_mpc",
-        rclcpp::NodeOptions()
-        .allow_undeclared_parameters(true)
-        .automatically_declare_parameters_from_overrides(true));
+  rclcpp::init(argc, argv);
+  rclcpp::Node::SharedPtr node = rclcpp::Node::make_shared(
+      robotName + "_mpc",
+      rclcpp::NodeOptions()
+          .allow_undeclared_parameters(true)
+          .automatically_declare_parameters_from_overrides(true));
 
-    const std::string taskFile = node->get_parameter("taskFile").as_string();
-    const std::string libFolder = node->get_parameter("libFolder").as_string();
-    const std::string urdfFile = node->get_parameter("urdfFile").as_string();
-    std::cerr << "Loading task file: " << taskFile << std::endl;
-    std::cerr << "Loading library folder: " << libFolder << std::endl;
-    std::cerr << "Loading urdf file: " << urdfFile << std::endl;
+  const std::string taskFile = node->get_parameter("taskFile").as_string();
+  const std::string libFolder = node->get_parameter("libFolder").as_string();
+  const std::string urdfFile = node->get_parameter("urdfFile").as_string();
+  std::cerr << "Loading task file: " << taskFile << std::endl;
+  std::cerr << "Loading library folder: " << libFolder << std::endl;
+  std::cerr << "Loading urdf file: " << urdfFile << std::endl;
 
-    MobileManipulatorInterface interface(taskFile, libFolder, urdfFile);
+  MobileManipulatorInterface interface(taskFile, libFolder, urdfFile);
 
-    auto rosReferenceManagerPtr = std::make_shared<RosReferenceManager>(
-        robotName, interface.getReferenceManagerPtr());
-    rosReferenceManagerPtr->subscribe(node);
+  // UPDATED: pass PinocchioInterface + ManipulatorModelInfo for EE-hold latch on mode switch
+  auto rosReferenceManagerPtr =
+      std::make_shared<mpc_controller::MobileManipulatorRosReferenceManager>(
+          node,
+          interface.getReferenceManagerPtr(),
+          robotName,
+          interface.getPinocchioInterface(),
+          interface.getManipulatorModelInfo());
 
-    SqpMpc mpc(interface.mpcSettings(), interface.sqpSettings(),
-               interface.getOptimalControlProblem(), interface.getInitializer());
-    mpc.getSolverPtr()->setReferenceManager(rosReferenceManagerPtr);
+  SqpMpc mpc(interface.mpcSettings(), interface.sqpSettings(),
+             interface.getOptimalControlProblem(),
+             interface.getInitializer());
+  mpc.getSolverPtr()->setReferenceManager(rosReferenceManagerPtr);
 
-    MPC_ROS_Interface mpcNode(mpc, robotName);
-    mpcNode.launchNodes(node);
+  MPC_ROS_Interface mpcNode(mpc, robotName);
+  mpcNode.launchNodes(node);
 
-    return 0;
+  return 0;
 }

@@ -20,6 +20,7 @@ find_package(ocs2_core REQUIRED)
 find_package(ocs2_mpc REQUIRED)
 find_package(ocs2_sqp REQUIRED)
 find_package(ocs2_ros_interfaces REQUIRED)
+find_package(ocs2_pinocchio_interface REQUIRED)
 find_package(ocs2_mobile_manipulator REQUIRED)
 find_package(ocs2_self_collision_visualization REQUIRED)
 find_package(ocs2_msgs REQUIRED)
@@ -55,6 +56,7 @@ ament_target_dependencies(${PROJECT_NAME}
   ocs2_mpc
   ocs2_sqp
   ocs2_ros_interfaces
+  ocs2_pinocchio_interface
   ocs2_mobile_manipulator
   ocs2_self_collision_visualization
 )
@@ -66,6 +68,7 @@ set(OCS2_CONTROL_NODE_DEPENDENCIES
   ocs2_mobile_manipulator
   ocs2_sqp
   ocs2_ros_interfaces
+  ocs2_pinocchio_interface
   ocs2_msgs
   std_srvs
   geometry_msgs
@@ -73,26 +76,50 @@ set(OCS2_CONTROL_NODE_DEPENDENCIES
 )
 
 # MPC node
-add_executable(mobile_manipulator_mpc_node src/mpc/MobileManipulatorMpcNode.cpp)
+add_executable(mobile_manipulator_mpc_node src/mpc/MobileManipulatorMpcNode.cpp
+  src/mpc/MobileManipulatorRosReferenceManager.cpp)
+target_include_directories(mobile_manipulator_mpc_node PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
 ament_target_dependencies(mobile_manipulator_mpc_node ${OCS2_CONTROL_NODE_DEPENDENCIES} ocs2_core ocs2_mpc)
-target_link_libraries(mobile_manipulator_mpc_node yaml-cpp)
+target_link_libraries(mobile_manipulator_mpc_node ${PROJECT_NAME} yaml-cpp)
 
 # SQP MPC node
-add_executable(mobile_manipulator_sqp_mpc_node src/mpc/MobileManipulatorSqpMpcNode.cpp)
+add_executable(mobile_manipulator_sqp_mpc_node src/mpc/MobileManipulatorSqpMpcNode.cpp
+  src/mpc/MobileManipulatorRosReferenceManager.cpp)
+target_include_directories(mobile_manipulator_sqp_mpc_node PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
 ament_target_dependencies(mobile_manipulator_sqp_mpc_node ${OCS2_CONTROL_NODE_DEPENDENCIES} ocs2_core ocs2_sqp)
-target_link_libraries(mobile_manipulator_sqp_mpc_node yaml-cpp)
+target_link_libraries(mobile_manipulator_sqp_mpc_node ${PROJECT_NAME} yaml-cpp)
 
 add_executable(mobile_manipulator_marker_target src/command/MobileManipulatorMarkerTarget.cpp)
+target_include_directories(mobile_manipulator_marker_target PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
 ament_target_dependencies(mobile_manipulator_marker_target ${OCS2_CONTROL_NODE_DEPENDENCIES})
-target_link_libraries(mobile_manipulator_marker_target yaml-cpp)
+target_link_libraries(mobile_manipulator_marker_target ${PROJECT_NAME} yaml-cpp)
 
 add_executable(mobile_manipulator_twist_target src/command/MobileManipulatorTwistTarget.cpp)
+target_include_directories(mobile_manipulator_twist_target PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
 ament_target_dependencies(mobile_manipulator_twist_target ${OCS2_CONTROL_NODE_DEPENDENCIES})
-target_link_libraries(mobile_manipulator_twist_target yaml-cpp)
+target_link_libraries(mobile_manipulator_twist_target ${PROJECT_NAME} yaml-cpp)
 
 add_executable(mobile_manipulator_trajectory_target src/command/MobileManipulatorTrajectoryTarget.cpp)
+target_include_directories(mobile_manipulator_trajectory_target PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
 ament_target_dependencies(mobile_manipulator_trajectory_target ${OCS2_CONTROL_NODE_DEPENDENCIES})
-target_link_libraries(mobile_manipulator_trajectory_target yaml-cpp)
+target_link_libraries(mobile_manipulator_trajectory_target ${PROJECT_NAME} yaml-cpp)
+
+add_executable(mobile_manipulator_joint_trajectory_target src/command/MobileManipulatorJointTrajectoryTarget.cpp)
+target_include_directories(mobile_manipulator_joint_trajectory_target PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
+ament_target_dependencies(mobile_manipulator_joint_trajectory_target ${OCS2_CONTROL_NODE_DEPENDENCIES})
+target_link_libraries(mobile_manipulator_joint_trajectory_target ${PROJECT_NAME} yaml-cpp)
 
 add_executable(fake_base_odom_node src/sim/FakeBaseOdomNode.cpp)
 ament_target_dependencies(fake_base_odom_node rclcpp geometry_msgs nav_msgs tf2_ros)
@@ -111,6 +138,7 @@ install(TARGETS
   mobile_manipulator_marker_target
   mobile_manipulator_twist_target
   mobile_manipulator_trajectory_target
+  mobile_manipulator_joint_trajectory_target
   fake_base_odom_node
   DESTINATION lib/${PROJECT_NAME}
 )
