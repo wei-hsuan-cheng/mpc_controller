@@ -12,6 +12,42 @@
 
 namespace mpc_controller {
 
+namespace {
+
+// State layout: baseDim / qArmOffset / armDim
+inline void computeStateLayout(const ocs2::mobile_manipulator::ManipulatorModelInfo& info,
+                               int& baseDim, int& qArmOffset, int& armDim) {
+  armDim = static_cast<int>(info.armDim);
+
+  using MT = ocs2::mobile_manipulator::ManipulatorModelType;
+  switch (info.manipulatorModelType) {
+    case MT::DefaultManipulator:
+      baseDim = 0;
+      qArmOffset = 0;
+      break;
+    case MT::WheelBasedMobileManipulator:
+      baseDim = 3;   // x,y,yaw
+      qArmOffset = 3;
+      break;
+    case MT::FloatingArmManipulator:
+    case MT::FullyActuatedFloatingArmManipulator:
+      baseDim = 6;   // (pos+ori) or (xyz+rpy) depends on mapping, but always 6-dim
+      qArmOffset = 6;
+      break;
+    default:
+      // conservative fallback
+      baseDim = 0;
+      qArmOffset = 0;
+      break;
+  }
+}
+
+inline bool isValidSegment(int start, int length, int total) {
+  return (start >= 0) && (length >= 0) && (start + length <= total);
+}
+
+}  // namespace
+
 MobileManipulatorRosReferenceManager::MobileManipulatorRosReferenceManager(
     const rclcpp::Node::SharedPtr& node,
     std::shared_ptr<ocs2::ReferenceManagerInterface> referenceManager,
@@ -23,10 +59,11 @@ MobileManipulatorRosReferenceManager::MobileManipulatorRosReferenceManager(
       node_(node),
       topicPrefix_(std::move(topicPrefix)),
       pinocchioInterface_(pinocchioInterface),  // copy
+      modelInfo_(modelInfo),
       pinocchioMapping_(modelInfo) {
 
   // Resolve EE frame id once
-  eeFrameId_ = pinocchioInterface_.getModel().getFrameId(modelInfo.eeFrame);
+  eeFrameId_ = pinocchioInterface_.getModel().getFrameId(modelInfo_.eeFrame);
 
   // Optional param
   if (node_->has_parameter("target_timeout_sec")) {
@@ -67,7 +104,7 @@ void MobileManipulatorRosReferenceManager::observationCallback(const ocs2_msgs::
   const auto obs = ocs2::ros_msg_conversions::readObservationMsg(*msg);
   std::lock_guard<std::mutex> lock(obsMutex_);
   latestObs_ = obs;
-  hasObs_ = true;
+  hasObs_.store(true, std::memory_order_release);
 }
 
 bool MobileManipulatorRosReferenceManager::hasRecentEeTarget() const {
@@ -87,7 +124,7 @@ void MobileManipulatorRosReferenceManager::modeScheduleCallback(const ocs2_msgs:
   auto modeSchedule = ocs2::ros_msg_conversions::readModeScheduleMsg(*msg);
   referenceManagerPtr_->setModeSchedule(std::move(modeSchedule));
 
-  if (!hasObs_) return;
+  if (!hasObs_.load(std::memory_order_acquire)) return;
   if (msg->mode_sequence.empty()) return;
 
   // Current mode is the first one (for event_times empty: constant mode)
@@ -147,7 +184,7 @@ ocs2::TargetTrajectories MobileManipulatorRosReferenceManager::makeEeHoldFromObs
   pinocchio::Model::ConfigVectorType q = pinocchio::neutral(model);
   q = qPinRaw;
 
-  // Use non-const data (pinocchio updates data)
+  // pinocchio updates data
   pinocchio::forwardKinematics(model, data, q);
   pinocchio::updateFramePlacements(model, data);
 
@@ -223,25 +260,55 @@ void MobileManipulatorRosReferenceManager::setHoldTargetsFromObservation(
   // 1) EE hold
   mm->setEeTargetTrajectories(eeHold);
 
-  // 2) Base hold (WMM convention: base in first 3 dims)
-  {
-    const int baseDim = 3;
-    ocs2::TargetTrajectories baseHold;
-    baseHold.timeTrajectory = {obs.time};
-    baseHold.stateTrajectory = {obs.state.head(baseDim)};
-    baseHold.inputTrajectory = {};
-    mm->setBaseTargetTrajectories(std::move(baseHold));
+  // state layout: baseDim / qArmOffset / armDim
+  int baseDim = 0;
+  int qArmOffset = 0;
+  int armDim = 0;
+  computeStateLayout(modelInfo_, baseDim, qArmOffset, armDim);
+
+  const int stateDim = static_cast<int>(obs.state.size());
+
+  // 2) Base hold (only meaningful if baseDim > 0; skip for fixed-base)
+  if (baseDim > 0) {
+    if (!isValidSegment(0, baseDim, stateDim)) {
+      RCLCPP_WARN(node_->get_logger(),
+                  "[RosRefManager][hold] base segment invalid: baseDim=%d stateDim=%d (modelType=%d). Skip base hold.",
+                  baseDim, stateDim, static_cast<int>(modelInfo_.manipulatorModelType));
+    } else {
+      ocs2::TargetTrajectories baseHold;
+      baseHold.timeTrajectory = {obs.time};
+      baseHold.stateTrajectory = {obs.state.head(baseDim)};
+      baseHold.inputTrajectory = {};
+      mm->setBaseTargetTrajectories(std::move(baseHold));
+    }
   }
 
-  // 3) Joint hold (WMM convention: arm q starts at offset 3, armDim=6)
-  {
-    const int armDim = 6;
-    const int qArmOffset = 3;
-    ocs2::TargetTrajectories jointHold;
-    jointHold.timeTrajectory = {obs.time};
-    jointHold.stateTrajectory = {obs.state.segment(qArmOffset, armDim)};
-    jointHold.inputTrajectory = {};
-    mm->setJointTargetTrajectories(std::move(jointHold));
+  // 3) Joint hold (armDim is from modelInfo.armDim; offset depends on modelType)
+  if (armDim > 0) {
+    if (!isValidSegment(qArmOffset, armDim, stateDim)) {
+      RCLCPP_WARN(node_->get_logger(),
+                  "[RosRefManager][hold] arm segment invalid: qArmOffset=%d armDim=%d stateDim=%d (modelType=%d). "
+                  "Fallback: use tail(armDim) if possible.",
+                  qArmOffset, armDim, stateDim, static_cast<int>(modelInfo_.manipulatorModelType));
+
+      if (armDim <= stateDim) {
+        ocs2::TargetTrajectories jointHold;
+        jointHold.timeTrajectory = {obs.time};
+        jointHold.stateTrajectory = {obs.state.tail(armDim)};
+        jointHold.inputTrajectory = {};
+        mm->setJointTargetTrajectories(std::move(jointHold));
+      } else {
+        RCLCPP_WARN(node_->get_logger(),
+                    "[RosRefManager][hold] armDim > stateDim (armDim=%d stateDim=%d). Skip joint hold.", armDim,
+                    stateDim);
+      }
+    } else {
+      ocs2::TargetTrajectories jointHold;
+      jointHold.timeTrajectory = {obs.time};
+      jointHold.stateTrajectory = {obs.state.segment(qArmOffset, armDim)};
+      jointHold.inputTrajectory = {};
+      mm->setJointTargetTrajectories(std::move(jointHold));
+    }
   }
 }
 
