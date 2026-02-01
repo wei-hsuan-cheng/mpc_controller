@@ -191,7 +191,7 @@ def generate_launch_description():
         }.items(),
     )
 
-    # Trajectory tracking launch (tt_launch)
+    # Trajectory tracking launcher
     tt_dir = PathJoinSubstitution([FindPackageShare("mpc_controller"), "launch", "command"])
     tt_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(

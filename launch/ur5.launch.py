@@ -5,6 +5,7 @@ import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
@@ -37,11 +38,21 @@ def generate_launch_description():
         DeclareLaunchArgument("mrtFreq", default_value="250", description="MRT update frequency (should be integer)"),
         DeclareLaunchArgument("perfLogPeriod", default_value="2.0", description="Performance log period [sec]"),
         DeclareLaunchArgument("controllersFile", default_value=controllers_default),
-        DeclareLaunchArgument("globalFrame", default_value="root"),
+        DeclareLaunchArgument("globalFrame", default_value="world"),
         DeclareLaunchArgument("baseCmdTopic", default_value="/cmd_vel"),
         DeclareLaunchArgument("odomTopic", default_value="/odom"),
         DeclareLaunchArgument("initialPoseFile", default_value=initial_pose_default),
         DeclareLaunchArgument("commandType", default_value="marker"),
+
+        # --- TT launch switches / args (cartesian planner) ---
+        DeclareLaunchArgument("use_tt", default_value="true", description="Enable target-trajectory publisher/monitor"),
+        DeclareLaunchArgument("ttLaunch", default_value="cartesian_tt", description="tt launch file in mpc_controller/launch/tt (without .launch.py)"),
+        DeclareLaunchArgument("robotName", default_value="mobile_manipulator", description="Topic prefix used by MPC ROS interface"),
+        DeclareLaunchArgument("ttPublishRate", default_value="20.0", description="TT publish rate [Hz]"),
+        DeclareLaunchArgument("ttMonitorRate", default_value="50.0", description="TT monitor rate [Hz]"),
+        DeclareLaunchArgument("ttPosTol", default_value="0.03", description="Position tolerance [m]"),
+        DeclareLaunchArgument("ttOriTol", default_value="0.20", description="Orientation tolerance [rad]"),
+
     ]
 
     robot_description_content = Command(
@@ -124,6 +135,31 @@ def generate_launch_description():
         }.items(),
     )
 
+    # Trajectory tracking launcher
+    tt_dir = PathJoinSubstitution([FindPackageShare("mpc_controller"), "launch", "command"])
+    tt_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([
+                tt_dir,
+                PythonExpression(["'", LaunchConfiguration("ttLaunch"), "'", " + '.launch.py'"]),
+            ])
+        ),
+        condition=IfCondition(LaunchConfiguration("use_tt")),
+        launch_arguments={
+            "taskFile": LaunchConfiguration("taskFile"),
+            "libFolder": LaunchConfiguration("libFolder"),
+            "urdfFile": LaunchConfiguration("urdfFile"),
+            "globalFrame": LaunchConfiguration("globalFrame"),
+
+            "robotName": LaunchConfiguration("robotName"),
+            "publishRate": LaunchConfiguration("ttPublishRate"),
+            "monitorRate": LaunchConfiguration("ttMonitorRate"),
+            "posTol": LaunchConfiguration("ttPosTol"),
+            "oriTol": LaunchConfiguration("ttOriTol"),
+        }.items(),
+    )
+
+
     visualize_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([mpc_share, "launch", "visualization", "visualize.launch.py"])
@@ -141,6 +177,7 @@ def generate_launch_description():
             mpc_node,
             ros2_control_node,
             controller_sequence,
-            command_launch,
+            # command_launch,
+            tt_launch,
         ]
     )
