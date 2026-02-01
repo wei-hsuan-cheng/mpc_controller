@@ -1,5 +1,3 @@
-import os
-
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
@@ -8,18 +6,18 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     declared_arguments = [
+        # required: coming from main launch
         DeclareLaunchArgument("taskFile", default_value=""),
         DeclareLaunchArgument("libFolder", default_value=""),
         DeclareLaunchArgument("urdfFile", default_value=""),
         DeclareLaunchArgument("globalFrame", default_value="odom"),
+        DeclareLaunchArgument("robotName", default_value="mobile_manipulator"),
 
-        DeclareLaunchArgument("planner_rate", default_value="50.0"),
-        DeclareLaunchArgument("frame_id", default_value=LaunchConfiguration("globalFrame")),
-        DeclareLaunchArgument("publish_markers", default_value="true"),
-
-        DeclareLaunchArgument("mpc_observation_topic", default_value="/mobile_manipulator_mpc_observation"),
-        DeclareLaunchArgument("mpc_policy_topic", default_value="/mobile_manipulator_mpc_policy"),
-        DeclareLaunchArgument("target_traj_topic", default_value="/mobile_manipulator_mpc_target_trajectories"),
+        # tt params
+        DeclareLaunchArgument("publishRate", default_value="20.0"),
+        DeclareLaunchArgument("monitorRate", default_value="50.0"),
+        DeclareLaunchArgument("posTol", default_value="0.03"),
+        DeclareLaunchArgument("oriTol", default_value="0.20"),
     ]
 
     tt_pub = Node(
@@ -31,13 +29,9 @@ def generate_launch_description():
             "taskFile": LaunchConfiguration("taskFile"),
             "libFolder": LaunchConfiguration("libFolder"),
             "urdfFile": LaunchConfiguration("urdfFile"),
-            "globalFrame": LaunchConfiguration("frame_id"),
-            "rate": LaunchConfiguration("planner_rate"),
-            "publish_markers": LaunchConfiguration("publish_markers"),
-
-            "mpc_observation_topic": LaunchConfiguration("mpc_observation_topic"),
-            "mpc_policy_topic": LaunchConfiguration("mpc_policy_topic"),
-            "target_traj_topic": LaunchConfiguration("target_traj_topic"),
+            "globalFrame": LaunchConfiguration("globalFrame"),
+            "robotName": LaunchConfiguration("robotName"),
+            "publishRate": LaunchConfiguration("publishRate"),
         }],
     )
 
@@ -47,7 +41,14 @@ def generate_launch_description():
         name="trajectory_progress_monitor",
         output="screen",
         parameters=[{
-            "globalFrame": LaunchConfiguration("frame_id"),
+            "taskFile": LaunchConfiguration("taskFile"),
+            "libFolder": LaunchConfiguration("libFolder"),
+            "urdfFile": LaunchConfiguration("urdfFile"),
+
+            "robotName": LaunchConfiguration("robotName"),
+            "monitorRate": LaunchConfiguration("monitorRate"),
+            "posTol": LaunchConfiguration("posTol"),
+            "oriTol": LaunchConfiguration("oriTol"),
         }],
     )
 
