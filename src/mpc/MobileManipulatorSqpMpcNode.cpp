@@ -28,7 +28,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ******************************************************************************/
 
 #include <ocs2_sqp/SqpMpc.h>
-#include <ocs2_mobile_manipulator/MobileManipulatorInterface.h>
+#include <mobile_manipulator_mpc/MobileManipulatorInterface.h>
 #include <ocs2_ros_interfaces/mpc/MPC_ROS_Interface.h>
 
 #include "mpc_controller/mpc/MobileManipulatorRosReferenceManager.h"
@@ -36,7 +36,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "rclcpp/rclcpp.hpp"
 
 using namespace ocs2;
-using namespace mobile_manipulator;
+using namespace mobile_manipulator_mpc;
 
 int main(int argc, char** argv) {
   const std::string robotName = "mobile_manipulator";

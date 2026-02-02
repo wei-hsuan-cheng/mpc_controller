@@ -5,7 +5,7 @@
 #include <rclcpp/rclcpp.hpp>
 
 #include <ocs2_ddp/GaussNewtonDDP_MPC.h>
-#include <ocs2_mobile_manipulator/MobileManipulatorInterface.h>
+#include <mobile_manipulator_mpc/MobileManipulatorInterface.h>
 #include <ocs2_ros_interfaces/common/RosMsgConversions.h>
 #include <ocs2_ros_interfaces/mpc/MPC_ROS_Interface.h>
 #include <ocs2_msgs/msg/mpc_observation.hpp>
@@ -15,7 +15,7 @@
 using ocs2::GaussNewtonDDP_MPC;
 using ocs2::MPC_ROS_Interface;
 using ocs2::SystemObservation;
-using ocs2::mobile_manipulator::MobileManipulatorInterface;
+using ocs2::mobile_manipulator_mpc::MobileManipulatorInterface;
 
 namespace {
 

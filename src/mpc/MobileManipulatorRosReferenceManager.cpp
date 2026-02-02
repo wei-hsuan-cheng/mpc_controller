@@ -3,7 +3,7 @@
 #include <utility>
 
 #include <ocs2_ros_interfaces/common/RosMsgConversions.h>
-#include <ocs2_mobile_manipulator/reference/MobileManipulatorReferenceManager.h>
+#include <mobile_manipulator_mpc/reference/MobileManipulatorReferenceManager.h>
 
 // Pinocchio FK
 #include <pinocchio/algorithm/frames.hpp>
@@ -14,11 +14,11 @@ namespace mpc_controller {
 
 namespace {
 
-inline void computeStateLayout(const ocs2::mobile_manipulator::ManipulatorModelInfo& info,
+inline void computeStateLayout(const ocs2::mobile_manipulator_mpc::ManipulatorModelInfo& info,
                                int& baseDim, int& qArmOffset, int& armDim) {
   armDim = static_cast<int>(info.armDim);
 
-  using MT = ocs2::mobile_manipulator::ManipulatorModelType;
+  using MT = ocs2::mobile_manipulator_mpc::ManipulatorModelType;
   switch (info.manipulatorModelType) {
     case MT::DefaultManipulator:
       baseDim = 0;
@@ -51,7 +51,7 @@ MobileManipulatorRosReferenceManager::MobileManipulatorRosReferenceManager(
     std::shared_ptr<ocs2::ReferenceManagerInterface> referenceManager,
     std::string topicPrefix,
     const ocs2::PinocchioInterface& pinocchioInterface,
-    const ocs2::mobile_manipulator::ManipulatorModelInfo& modelInfo,
+    const ocs2::mobile_manipulator_mpc::ManipulatorModelInfo& modelInfo,
     const rclcpp::QoS& qos)
     : ocs2::ReferenceManagerDecorator(std::move(referenceManager)),
       node_(node),
@@ -134,7 +134,7 @@ void MobileManipulatorRosReferenceManager::modeScheduleCallback(const ocs2_msgs:
   }
 
   auto* mm =
-      dynamic_cast<ocs2::mobile_manipulator::MobileManipulatorReferenceManager*>(referenceManagerPtr_.get());
+      dynamic_cast<ocs2::mobile_manipulator_mpc::MobileManipulatorReferenceManager*>(referenceManagerPtr_.get());
   if (mm == nullptr) return;
 
   // Mode 0: joint-only
@@ -197,7 +197,7 @@ void MobileManipulatorRosReferenceManager::eeTargetCallback(
   lastEeTargetStamp_ = node_->now();
 
   auto* mm =
-      dynamic_cast<ocs2::mobile_manipulator::MobileManipulatorReferenceManager*>(referenceManagerPtr_.get());
+      dynamic_cast<ocs2::mobile_manipulator_mpc::MobileManipulatorReferenceManager*>(referenceManagerPtr_.get());
   if (mm != nullptr) {
     mm->setEeTargetTrajectories(std::move(target));
   }
@@ -211,7 +211,7 @@ void MobileManipulatorRosReferenceManager::jointTargetCallback(
   lastJointTargetStamp_ = node_->now();
 
   auto* mm =
-      dynamic_cast<ocs2::mobile_manipulator::MobileManipulatorReferenceManager*>(referenceManagerPtr_.get());
+      dynamic_cast<ocs2::mobile_manipulator_mpc::MobileManipulatorReferenceManager*>(referenceManagerPtr_.get());
   if (mm != nullptr) {
     mm->setJointTargetTrajectories(std::move(target));
   }
@@ -223,7 +223,7 @@ void MobileManipulatorRosReferenceManager::baseTargetCallback(
   if (target.timeTrajectory.empty() || target.stateTrajectory.empty()) return;
 
   auto* mm =
-      dynamic_cast<ocs2::mobile_manipulator::MobileManipulatorReferenceManager*>(referenceManagerPtr_.get());
+      dynamic_cast<ocs2::mobile_manipulator_mpc::MobileManipulatorReferenceManager*>(referenceManagerPtr_.get());
   if (mm != nullptr) {
     mm->setBaseTargetTrajectories(std::move(target));
   }
@@ -234,7 +234,7 @@ void MobileManipulatorRosReferenceManager::setHoldTargetsFromObservation(
     const ocs2::TargetTrajectories& eeHold) {
 
   auto* mm =
-      dynamic_cast<ocs2::mobile_manipulator::MobileManipulatorReferenceManager*>(referenceManagerPtr_.get());
+      dynamic_cast<ocs2::mobile_manipulator_mpc::MobileManipulatorReferenceManager*>(referenceManagerPtr_.get());
   if (mm == nullptr) return;
 
   // 1) EE hold

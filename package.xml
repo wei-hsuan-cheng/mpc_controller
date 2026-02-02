@@ -22,7 +22,7 @@
   <depend>ocs2_core</depend>
   <depend>ocs2_mpc</depend>
   <depend>ocs2_ros_interfaces</depend>
-  <depend>ocs2_mobile_manipulator</depend>
+  <depend>mobile_manipulator_mpc</depend>
   <depend>ocs2_self_collision_visualization</depend>
 
   <test_depend>ament_lint_auto</test_depend>

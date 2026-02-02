@@ -16,8 +16,8 @@
 
 #include <ocs2_pinocchio_interface/PinocchioInterface.h>
 
-#include <ocs2_mobile_manipulator/ManipulatorModelInfo.h>
-#include <ocs2_mobile_manipulator/MobileManipulatorPinocchioMapping.h>
+#include <mobile_manipulator_mpc/ManipulatorModelInfo.h>
+#include <mobile_manipulator_mpc/MobileManipulatorPinocchioMapping.h>
 
 namespace mpc_controller {
 
@@ -28,7 +28,7 @@ class MobileManipulatorRosReferenceManager final : public ocs2::ReferenceManager
       std::shared_ptr<ocs2::ReferenceManagerInterface> referenceManager,
       std::string topicPrefix,
       const ocs2::PinocchioInterface& pinocchioInterface,
-      const ocs2::mobile_manipulator::ManipulatorModelInfo& modelInfo,
+      const ocs2::mobile_manipulator_mpc::ManipulatorModelInfo& modelInfo,
       const rclcpp::QoS& qos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable());
 
   /** Inject the latest observation from the MPC node (observation subscriber lives in MPC_ROS_Interface). */
@@ -54,8 +54,8 @@ class MobileManipulatorRosReferenceManager final : public ocs2::ReferenceManager
 
   // Pinocchio for FK
   ocs2::PinocchioInterface pinocchioInterface_;  // local copy
-  ocs2::mobile_manipulator::ManipulatorModelInfo modelInfo_;
-  ocs2::mobile_manipulator::MobileManipulatorPinocchioMapping pinocchioMapping_;
+  ocs2::mobile_manipulator_mpc::ManipulatorModelInfo modelInfo_;
+  ocs2::mobile_manipulator_mpc::MobileManipulatorPinocchioMapping pinocchioMapping_;
   std::size_t eeFrameId_{0};
 
   // Subs

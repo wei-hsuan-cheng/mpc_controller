@@ -13,7 +13,7 @@
 #include <ocs2_msgs/msg/mpc_target_trajectories.hpp>
 #include <ocs2_ros_interfaces/common/RosMsgConversions.h>
 
-#include <ocs2_mobile_manipulator/MobileManipulatorInterface.h>
+#include <mobile_manipulator_mpc/MobileManipulatorInterface.h>
 
 using namespace std::chrono_literals;
 
@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
   const double freqHz = node->get_parameter("frequency_hz").as_double();
 
   // Load model and dimensions
-  ocs2::mobile_manipulator::MobileManipulatorInterface interface(taskFile, libFolder, urdfFile);
+  ocs2::mobile_manipulator_mpc::MobileManipulatorInterface interface(taskFile, libFolder, urdfFile);
   const auto& modelInfo = interface.getManipulatorModelInfo();
   const size_t armDim = modelInfo.armDim;
   const size_t inputDim = modelInfo.inputDim;

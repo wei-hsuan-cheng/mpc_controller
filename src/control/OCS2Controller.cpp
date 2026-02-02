@@ -22,8 +22,8 @@ namespace mpc_controller
 using ocs2::SystemObservation;
 using ocs2::TargetTrajectories;
 using ocs2::vector_t;
-using ocs2::mobile_manipulator::MobileManipulatorInterface;
-using ocs2::mobile_manipulator::ManipulatorModelType;
+using ocs2::mobile_manipulator_mpc::MobileManipulatorInterface;
+using ocs2::mobile_manipulator_mpc::ManipulatorModelType;
 
 // ===== Param helpers =====
 

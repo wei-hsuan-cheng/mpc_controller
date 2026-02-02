@@ -18,7 +18,7 @@
 #include <ocs2_core/Types.h>
 #include <ocs2_core/reference/TargetTrajectories.h>
 #include <ocs2_mpc/CommandData.h>
-#include <ocs2_mobile_manipulator/MobileManipulatorInterface.h>
+#include <mobile_manipulator_mpc/MobileManipulatorInterface.h>
 #include <ocs2_oc/oc_data/PrimalSolution.h>
 #include <ocs2_self_collision_visualization/GeometryInterfaceVisualization.h>
 
@@ -27,7 +27,7 @@ namespace mpc_controller {
 class MobileManipulatorVisualization {
 public:
   MobileManipulatorVisualization(const rclcpp::Node::SharedPtr &node,
-                                 const ocs2::mobile_manipulator::MobileManipulatorInterface &interface,
+                                 const ocs2::mobile_manipulator_mpc::MobileManipulatorInterface &interface,
                                  const std::string &task_file,
                                  const std::string &urdf_file,
                                  const std::string &global_frame);
@@ -58,7 +58,7 @@ private:
 
   rclcpp::Node::SharedPtr node_;
   ocs2::PinocchioInterface pinocchio_interface_;
-  const ocs2::mobile_manipulator::ManipulatorModelInfo model_info_;
+  const ocs2::mobile_manipulator_mpc::ManipulatorModelInfo model_info_;
   std::vector<std::string> remove_joint_names_;
 
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr optimized_state_markers_pub_;
