@@ -103,6 +103,10 @@ mpc
   coldStart                       false
   
   debugPrint                      false
+  printSolverStatistics           false
+  printSolverStatus               false
+  printLinesearch                 false
+  debugPrintRollout               false
 
   mpcDesiredFrequency             100   ; [Hz] // 80, 100, -1 (negative for best effort policy rollout!)
   mrtDesiredFrequency             250   ; [Hz] // 500
