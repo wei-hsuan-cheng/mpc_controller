@@ -3,6 +3,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 
 #include <rclcpp/rclcpp.hpp>
@@ -11,7 +12,6 @@
 #include <ocs2_mpc/SystemObservation.h>
 #include <ocs2_oc/synchronized_module/ReferenceManagerDecorator.h>
 #include <ocs2_msgs/msg/mode_schedule.hpp>
-#include <ocs2_msgs/msg/mpc_observation.hpp>
 #include <ocs2_msgs/msg/mpc_target_trajectories.hpp>
 
 #include <ocs2_pinocchio_interface/PinocchioInterface.h>
@@ -31,9 +31,10 @@ class MobileManipulatorRosReferenceManager final : public ocs2::ReferenceManager
       const ocs2::mobile_manipulator::ManipulatorModelInfo& modelInfo,
       const rclcpp::QoS& qos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable());
 
- private:
-  void observationCallback(const ocs2_msgs::msg::MpcObservation::SharedPtr msg);
+  /** Inject the latest observation from the MPC node (observation subscriber lives in MPC_ROS_Interface). */
+  void setLatestObservation(const ocs2::SystemObservation& obs);
 
+ private:
   void modeScheduleCallback(const ocs2_msgs::msg::ModeSchedule::SharedPtr msg);
 
   void eeTargetCallback(const ocs2_msgs::msg::MpcTargetTrajectories::SharedPtr msg);
@@ -55,18 +56,16 @@ class MobileManipulatorRosReferenceManager final : public ocs2::ReferenceManager
   ocs2::PinocchioInterface pinocchioInterface_;  // local copy
   ocs2::mobile_manipulator::ManipulatorModelInfo modelInfo_;
   ocs2::mobile_manipulator::MobileManipulatorPinocchioMapping pinocchioMapping_;
-
   std::size_t eeFrameId_{0};
 
   // Subs
   rclcpp::Subscription<ocs2_msgs::msg::ModeSchedule>::SharedPtr modeScheduleSub_;
-  rclcpp::Subscription<ocs2_msgs::msg::MpcObservation>::SharedPtr observationSub_;
   rclcpp::Subscription<ocs2_msgs::msg::MpcTargetTrajectories>::SharedPtr eeTargetSub_;
   rclcpp::Subscription<ocs2_msgs::msg::MpcTargetTrajectories>::SharedPtr jointTargetSub_;
   rclcpp::Subscription<ocs2_msgs::msg::MpcTargetTrajectories>::SharedPtr baseTargetSub_;
   rclcpp::Subscription<ocs2_msgs::msg::MpcTargetTrajectories>::SharedPtr legacyEeTargetSub_;
 
-  // Latest obs cache
+  // Latest observation cache (injected)
   mutable std::mutex obsMutex_;
   ocs2::SystemObservation latestObs_;
   std::atomic_bool hasObs_{false};
