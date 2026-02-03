@@ -165,7 +165,7 @@ def generate_launch_description():
             mpc_node,
             ros2_control_node,
             controller_sequence,
-            # command_launch,
-            tt_launch,
+            command_launch,
+            # tt_launch,
         ]
     )
