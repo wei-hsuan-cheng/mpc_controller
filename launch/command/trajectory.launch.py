@@ -10,7 +10,7 @@ common_dir = Path(__file__).resolve().parent.parent / "common"
 if str(common_dir) not in sys.path:
     sys.path.insert(0, str(common_dir))
 
-from config_utils import load_common_params, load_default_frame_from_robot_config  # noqa: E402
+from config_utils import load_common_params, load_default_frame_from_robot_config
 
 
 def generate_launch_description():

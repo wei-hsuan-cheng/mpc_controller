@@ -45,13 +45,9 @@ def generate_launch_description():
         DeclareLaunchArgument("commandType", default_value="marker"),
 
         # --- TT launch switches / args (cartesian planner) ---
-        DeclareLaunchArgument("use_tt", default_value="true", description="Enable target-trajectory publisher/monitor"),
-        DeclareLaunchArgument("ttLaunch", default_value="cartesian_tt", description="tt launch file in mpc_controller/launch/tt (without .launch.py)"),
-        DeclareLaunchArgument("robotName", default_value="mobile_manipulator", description="Topic prefix used by MPC ROS interface"),
-        DeclareLaunchArgument("ttPublishRate", default_value="20.0", description="TT publish rate [Hz]"),
-        DeclareLaunchArgument("ttMonitorRate", default_value="50.0", description="TT monitor rate [Hz]"),
-        DeclareLaunchArgument("ttPosTol", default_value="0.03", description="Position tolerance [m]"),
-        DeclareLaunchArgument("ttOriTol", default_value="0.20", description="Orientation tolerance [rad]"),
+        DeclareLaunchArgument('robotName', default_value='mobile_manipulator'),
+        DeclareLaunchArgument('tt_params', default_value=os.path.join(
+            get_package_share_directory('mpc_cartesian_planner'), 'config', 'tt_params.yaml')),
 
     ]
 
@@ -141,24 +137,16 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([
                 tt_dir,
-                PythonExpression(["'", LaunchConfiguration("ttLaunch"), "'", " + '.launch.py'"]),
+                PythonExpression(["'cartesian_tt.launch.py'"]),
             ])
         ),
-        condition=IfCondition(LaunchConfiguration("use_tt")),
         launch_arguments={
+            "robotName": LaunchConfiguration("robotName"),
             "taskFile": LaunchConfiguration("taskFile"),
             "libFolder": LaunchConfiguration("libFolder"),
             "urdfFile": LaunchConfiguration("urdfFile"),
-            "globalFrame": LaunchConfiguration("globalFrame"),
-
-            "robotName": LaunchConfiguration("robotName"),
-            "publishRate": LaunchConfiguration("ttPublishRate"),
-            "monitorRate": LaunchConfiguration("ttMonitorRate"),
-            "posTol": LaunchConfiguration("ttPosTol"),
-            "oriTol": LaunchConfiguration("ttOriTol"),
         }.items(),
     )
-
 
     visualize_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -177,7 +165,7 @@ def generate_launch_description():
             mpc_node,
             ros2_control_node,
             controller_sequence,
-            command_launch,
-            # tt_launch,
+            # command_launch,
+            tt_launch,
         ]
     )

@@ -2,22 +2,21 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-
+from ament_index_python.packages import get_package_share_directory
+import os
 
 def generate_launch_description():
+    tt_params = LaunchConfiguration('tt_params')
+    
     declared_arguments = [
-        # required: coming from main launch
+        DeclareLaunchArgument('robotName', default_value='mobile_manipulator'),
+        DeclareLaunchArgument('tt_params', default_value=os.path.join(
+            get_package_share_directory('mpc_cartesian_planner'), 'config', 'tt_params.yaml')),
+        
         DeclareLaunchArgument("taskFile", default_value=""),
         DeclareLaunchArgument("libFolder", default_value=""),
         DeclareLaunchArgument("urdfFile", default_value=""),
-        DeclareLaunchArgument("globalFrame", default_value="odom"),
-        DeclareLaunchArgument("robotName", default_value="mobile_manipulator"),
-
-        # tt params
-        DeclareLaunchArgument("publishRate", default_value="20.0"),
-        DeclareLaunchArgument("monitorRate", default_value="50.0"),
-        DeclareLaunchArgument("posTol", default_value="0.03"),
-        DeclareLaunchArgument("oriTol", default_value="0.20"),
+        
     ]
 
     tt_pub = Node(
@@ -25,14 +24,14 @@ def generate_launch_description():
         executable="trajectory_tt_publisher_node",
         name="trajectory_tt_publisher",
         output="screen",
-        parameters=[{
-            "taskFile": LaunchConfiguration("taskFile"),
-            "libFolder": LaunchConfiguration("libFolder"),
-            "urdfFile": LaunchConfiguration("urdfFile"),
-            "globalFrame": LaunchConfiguration("globalFrame"),
-            "robotName": LaunchConfiguration("robotName"),
-            "publishRate": LaunchConfiguration("publishRate"),
-        }],
+        parameters=[tt_params,
+                    {
+                     "robotName": LaunchConfiguration("robotName"),
+                     "taskFile": LaunchConfiguration("taskFile"),
+                     "libFolder": LaunchConfiguration("libFolder"),
+                     "urdfFile": LaunchConfiguration("urdfFile"),
+                    },
+                    ],
     )
 
     progress_monitor = Node(
@@ -40,16 +39,14 @@ def generate_launch_description():
         executable="trajectory_progress_monitor_node",
         name="trajectory_progress_monitor",
         output="screen",
-        parameters=[{
-            "taskFile": LaunchConfiguration("taskFile"),
-            "libFolder": LaunchConfiguration("libFolder"),
-            "urdfFile": LaunchConfiguration("urdfFile"),
-
-            "robotName": LaunchConfiguration("robotName"),
-            "monitorRate": LaunchConfiguration("monitorRate"),
-            "posTol": LaunchConfiguration("posTol"),
-            "oriTol": LaunchConfiguration("oriTol"),
-        }],
+        parameters=[tt_params,
+                    {
+                     "robotName": LaunchConfiguration("robotName"),
+                     "taskFile": LaunchConfiguration("taskFile"),
+                     "libFolder": LaunchConfiguration("libFolder"),
+                     "urdfFile": LaunchConfiguration("urdfFile"),
+                    },
+                    ],
     )
 
     return LaunchDescription(declared_arguments + [tt_pub, progress_monitor])
