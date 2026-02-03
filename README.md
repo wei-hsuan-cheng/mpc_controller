@@ -111,8 +111,8 @@ Model type selection:
 ## Mode schedule
 Start MPC controller
 ```bash
-ros2 control switch_controllers \
-  --activate mpc_controller
+ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController \
+   "{activate_controllers: ["mpc_controller"]}"
 ```
 
 Switch between joint, base, EE, tracking, or custom blending modes by topic.
