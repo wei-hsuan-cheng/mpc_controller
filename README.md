@@ -109,18 +109,15 @@ Model type selection:
 - `manipulatorModelType=1/2/3` when you want the base to be mobile/floating (wheel-based or free-floating), while keeping the same arm/EE frames from your URDF.
 
 ## Mode schedule
-Start MPC controller
+Start MPC controller and switch between joint, base, EE, tracking, or custom blending modes by topic.
 ```bash
-ros2 control switch_controllers \
-  --activate mpc_controller
-```
-
-Switch between joint, base, EE, tracking, or custom blending modes by topic.
-```bash
+# First switch to mode 1
+ros2 topic pub -1 /mobile_manipulator_mode_schedule ocs2_msgs/msg/ModeSchedule "{event_times: [], mode_sequence: [1]}"
+# Then start MPC controller
+ros2 service call /controller_manager/switch_controller controller_manager_msgs/srv/SwitchController \
+   "{activate_controllers: ["mpc_controller"]}"
 # Echo current mode
 ros2 topic echo /mobile_manipulator_mode_schedule
-# E.g., switch to mode 2
-ros2 topic pub -1 /mobile_manipulator_mode_schedule ocs2_msgs/msg/ModeSchedule "{event_times: [], mode_sequence: [2]}"
 ```
 
 Details of the mode schedule:
