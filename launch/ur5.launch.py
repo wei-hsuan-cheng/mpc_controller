@@ -37,7 +37,7 @@ def generate_launch_description():
         DeclareLaunchArgument("mrtFreq", default_value="250", description="MRT update frequency (should be integer)"),
         DeclareLaunchArgument("perfLogPeriod", default_value="2.0", description="Performance log period [sec]"),
         DeclareLaunchArgument("controllersFile", default_value=controllers_default),
-        DeclareLaunchArgument("globalFrame", default_value="root"),
+        DeclareLaunchArgument("globalFrame", default_value="world"),
         DeclareLaunchArgument("baseCmdTopic", default_value="/cmd_vel"),
         DeclareLaunchArgument("odomTopic", default_value="/odom"),
         DeclareLaunchArgument("initialPoseFile", default_value=initial_pose_default),

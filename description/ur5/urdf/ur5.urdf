@@ -1,10 +1,10 @@
 <?xml version="1.0" ?>
 <robot name="ur5">
-  <!-- Root link -->
-  <link name="root"/>
-  <joint name="root_joint" type="fixed">
+  <!-- World link -->
+  <link name="world"/>
+  <joint name="world_to_base_joint" type="fixed">
     <origin rpy="0 0 0" xyz="0 0 0"/>
-    <parent link="root"/>
+    <parent link="world"/>
     <child link="ur_arm_base_link"/>
   </joint>
 
