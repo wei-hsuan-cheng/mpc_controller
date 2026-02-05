@@ -153,7 +153,11 @@ Note that `modeWeights=3/4` are only for floating-base manipulator.
 ## MPC rollout topic
 
 ```bash
-# joint velocity command and feedback, e.g., joint_1
+# Fixed-base manipulator: joint velocity command and position rollout, e.g., joint_1
+/mobile_manipulator_mpc_policy/input_trajectory[0]/value[0]
+/mobile_manipulator_mpc_policy/state_trajectory[0]/value[0]
+
+# Floating-base manipulator: joint velocity command and feedback, e.g., joint_1
 /mobile_manipulator_mpc_policy/input_trajectory[0]/value[2]
 /joint_states/velocity[8]
 ```
