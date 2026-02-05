@@ -61,7 +61,6 @@ If you built [`ocs2_ros2`](https://github.com/wei-hsuan-cheng/ocs2_ros2) in anot
 Key parameters are specified in [`task.info`](./config/ridgeback_ur5/task.info) and [`ros2_controllers.yaml`](./config/ridgeback_ur5/ros2_controllers.yaml).
 
 ```bash
-
 auto_generated/   -> pre-built OCS2 libraries (CppAD) for robot
 config/           -> ros2_control YAML + task files
 description/      -> xacro/urdf assets (ros2_control settings included)
