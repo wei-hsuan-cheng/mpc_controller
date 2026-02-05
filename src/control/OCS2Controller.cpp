@@ -125,6 +125,14 @@ void OCS2Controller::resolveLoopMode()
   }
 }
 
+OCS2Controller::ArmCommandMode OCS2Controller::parseArmCommandMode(const std::string& s)
+{
+  if (s == "integrate_u" || s == "integrate" || s == "u") {
+    return ArmCommandMode::kIntegrateU;
+  }
+  return ArmCommandMode::kState;
+}
+
 // ===== Model layout =====
 void OCS2Controller::resolveModelLayout()
 {
@@ -216,6 +224,10 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   loop_mode_str_ = getParamAsString(node, "loopMode", "auto");
   loop_mode_ = parseLoopMode(loop_mode_str_);
 
+  // --- arm command mode ---
+  arm_command_mode_str_ = getParamAsString(node, "armCommandMode", "state");
+  arm_command_mode_ = parseArmCommandMode(arm_command_mode_str_);
+
   command_smoothing_alpha_ = std::clamp(command_smoothing_alpha_, 0.0, 1.0);
   policy_time_tolerance_factor_ = std::clamp(policy_time_tolerance_factor_, 0.0, 10.0);
 
@@ -270,9 +282,9 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
 
   RCLCPP_INFO(
     node->get_logger(),
-    "[OCS2Controller] modelType=%d | stateDim=%d inputDim=%d | base_state_dim=%zu base_input_dim=%zu | arm_state_offset=%zu arm_input_offset=%zu",
+    "[OCS2Controller] modelType=%d | stateDim=%d inputDim=%d | base_state_dim=%zu base_input_dim=%zu | arm_state_offset=%zu arm_input_offset=%zu | armCommandMode=%s",
     static_cast<int>(model_type_), state_dim_, input_dim_,
-    base_state_dim_, base_input_dim_, arm_state_offset_, arm_input_offset_);
+    base_state_dim_, base_input_dim_, arm_state_offset_, arm_input_offset_, arm_command_mode_str_.c_str());
 
   // --- visualization (optional) ---
   try {
@@ -581,7 +593,7 @@ controller_interface::return_type OCS2Controller::runRealtimeLoopStep()
   size_t mode_end = 0;
 
   mrt_->rolloutPolicy(t_req, obs.state, mrt_dt_, x_next, u_end, mode_end);
-  applyFilteredRolloutCommand(u_end, x_next);
+  applyFilteredRolloutCommand(u_end, x_next, mrt_dt_);
   last_command_ = u_end;
 
   virtual_time_ += mrt_dt_;
@@ -651,7 +663,7 @@ controller_interface::return_type OCS2Controller::runSynchronizedLoopStep()
   size_t mode_end = 0;
 
   mrt_->rolloutPolicy(t_req, obs.state, mrt_dt_, x_next, u_end, mode_end);
-  applyFilteredRolloutCommand(u_end, x_next);
+  applyFilteredRolloutCommand(u_end, x_next, mrt_dt_);
   last_command_ = u_end;
 
   SystemObservation next_obs;
@@ -701,7 +713,7 @@ void OCS2Controller::applyHoldCommand(const SystemObservation & observation)
   if (last_command_.size() == input_dim_) last_command_.setZero();
 }
 
-void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const vector_t & x_next)
+void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const vector_t & x_next, double dt_sec)
 {
   const double a = command_smoothing_alpha_;
 
@@ -726,7 +738,7 @@ void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const v
     }
   }
 
-  // arm LPF (pos)
+  // arm
   const size_t arm_dim = arm_joint_names_.size();
   if (arm_dim == 0) return;
 
@@ -734,14 +746,34 @@ void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const v
     if (joint_position_commands_.size() < arm_dim) return;
     if (last_arm_pos_cmd_.size() != arm_dim) last_arm_pos_cmd_.assign(arm_dim, 0.0);
 
-    for (size_t i = 0; i < arm_dim; ++i) {
-      const Eigen::Index si = static_cast<Eigen::Index>(arm_state_offset_ + i);
-      if (si >= x_next.size()) continue;
+    // ensure sane dt for integration
+    dt_sec = std::max(1e-6, dt_sec);
 
-      const double q_next = x_next(si);
-      const double q_cmd = a * q_next + (1.0 - a) * last_arm_pos_cmd_[i];
-      last_arm_pos_cmd_[i] = q_cmd;
-      joint_position_commands_[i]->set_value(q_cmd);
+    if (arm_command_mode_ == ArmCommandMode::kState) {
+      // MODE: state -> position
+      for (size_t i = 0; i < arm_dim; ++i) {
+        const Eigen::Index si = static_cast<Eigen::Index>(arm_state_offset_ + i);
+        if (si >= x_next.size()) continue;
+
+        const double q_next = x_next(si);
+        const double q_cmd = a * q_next + (1.0 - a) * last_arm_pos_cmd_[i];
+        last_arm_pos_cmd_[i] = q_cmd;
+        joint_position_commands_[i]->set_value(q_cmd);
+      }
+    } else {
+      // MODE: integrate_u -> position
+      for (size_t i = 0; i < arm_dim; ++i) {
+        const Eigen::Index ui = static_cast<Eigen::Index>(arm_input_offset_ + i);
+        if (ui >= u_end.size()) continue;
+
+        const double dq_cmd = u_end(ui);
+        const double q_int = last_arm_pos_cmd_[i] + dq_cmd * dt_sec;
+        // Same LPF form as state mode: blend new integrated position with previous cmd
+        const double q_cmd = a * q_int + (1.0 - a) * last_arm_pos_cmd_[i];
+
+        last_arm_pos_cmd_[i] = q_cmd;
+        joint_position_commands_[i]->set_value(q_cmd);
+      }
     }
   }
 }

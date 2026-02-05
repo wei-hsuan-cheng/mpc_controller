@@ -60,6 +60,11 @@ private:
 
   enum class LoopMode { kAuto, kSynchronized, kRealtime };
 
+  // How to convert MPC outputs to arm position commands
+  //  - kState:       use rollout state trajectory x_next as joint positions
+  //  - kIntegrateU:  integrate dq (from rollout input u_end) into joint positions
+  enum class ArmCommandMode { kState, kIntegrateU };
+
   // ===== Params helpers (robust to int/double overrides) =====
   static void declareIfUndeclaredNotSet(
     const rclcpp_lifecycle::LifecycleNode::SharedPtr& node, const std::string& name);
@@ -88,13 +93,15 @@ private:
   static LoopMode parseLoopMode(const std::string & s);
   void resolveLoopMode();
 
+  static ArmCommandMode parseArmCommandMode(const std::string& s);
+
   bool initializeHandles();
   SystemObservation buildObservation(double time_sec) const;
   TargetTrajectories computeInitialTarget(const vector_t & state, double time) const;
 
   void resetMpc();
   void applyHoldCommand(const SystemObservation & observation);
-  void applyFilteredRolloutCommand(const vector_t & u_end, const vector_t & x_next);
+  void applyFilteredRolloutCommand(const vector_t & u_end, const vector_t & x_next, double dt_sec);
 
   controller_interface::return_type runSynchronizedLoopStep();
   controller_interface::return_type runRealtimeLoopStep();
@@ -130,6 +137,10 @@ private:
   // Dummy-like loop settings
   std::string loop_mode_str_{"auto"};
   LoopMode loop_mode_{LoopMode::kAuto};
+
+  // Arm command conversion
+  std::string arm_command_mode_str_{"state"};
+  ArmCommandMode arm_command_mode_{ArmCommandMode::kState};
 
   double mpc_desired_frequency_{100.0};
   double mrt_desired_frequency_{250.0};

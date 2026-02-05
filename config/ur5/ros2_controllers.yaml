@@ -40,6 +40,8 @@ mpc_controller:
       - ur_arm_wrist_1_joint
       - ur_arm_wrist_2_joint
       - ur_arm_wrist_3_joint
+    
+    armCommandMode: "integrate_u"   # "integrate_u" or "state"
 
     # Arm command mode
     use_moveit_servo: false
