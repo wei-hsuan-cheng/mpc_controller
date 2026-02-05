@@ -69,6 +69,7 @@ set(OCS2_CONTROL_NODE_DEPENDENCIES
   ocs2_msgs
   std_srvs
   geometry_msgs
+  tf2_ros
   visualization_msgs
 )
 
