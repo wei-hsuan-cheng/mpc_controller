@@ -6,22 +6,19 @@ The package is intentionally self‑contained (`urdf`/`xacro`, `task` and `rviz`
 
 ## Prerequisites
 
-1. Install ROS 2 Humble (or a newer distro with the same APIs).
-2. Clone and build [`ocs2_ros2`](https://github.com/wei-hsuan-cheng/ocs2_ros2) up to `ocs2_mobile_manipulator_ros` `pkg`:
-    ```bash
-    cd ~/ros2_ws
-    colcon build --symlink-install \
-      --packages-up-to ocs2_mobile_manipulator_ros \
-      --parallel-workers 2 --executor sequential \
-      && . install/setup.bash
-    ```
-    - Make sure the [`ocs2_ros2`](https://github.com/wei-hsuan-cheng/ocs2_ros2) workspace is sourced before building this package.
+Install ROS 2 Humble (or a newer distro with the same APIs).
 
 ## Build and Run Demo
 
 ```bash
-# Clone this repo
-git clone https://github.com/wei-hsuan-cheng/mpc_controller.git
+# Clone the related repositories
+git clone \
+  --recursive https://github.com/wei-hsuan-cheng/ocs2_ros2.git \
+  -b humble_stable
+
+git clone \
+  https://github.com/wei-hsuan-cheng/mpc_controller.git \
+  -b humble_stable
 
 # rosdep install
 rosdep update
@@ -30,8 +27,8 @@ rosdep install --from-paths src --ignore-src -r -y
 # Build and install
 cd ~/ros2_ws
 colcon build --symlink-install \
-  --packages-select mpc_controller \
-  --parallel-workers 2 --executor sequential \
+  --packages-up-to mpc_controller \
+  --parallel-workers 4 --executor sequential \
   && . install/setup.bash
 ```
 
