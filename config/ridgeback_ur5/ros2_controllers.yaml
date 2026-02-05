@@ -41,6 +41,8 @@ mpc_controller:
       - ur_arm_wrist_2_joint
       - ur_arm_wrist_3_joint
 
+    armCommandMode: "integrate_u"   # "integrate_u" or "state"
+    
     # Base IO (you can remap these to your ridgeback stack)
     base_cmd_topic: "$(var baseCmdTopic)"
     odom_topic: "$(var odomTopic)"
