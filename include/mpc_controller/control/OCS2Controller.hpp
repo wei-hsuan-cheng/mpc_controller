@@ -198,7 +198,6 @@ private:
   vector_t last_base_cmd_{vector_t::Zero(0)};  // wheel-based: size=2, else empty
   std::vector<double> last_arm_pos_cmd_;
 
-  std::vector<double> last_arm_vel_cmd_;
   // Loop state
   bool handles_initialized_{false};
   bool mpc_reset_done_{false};
