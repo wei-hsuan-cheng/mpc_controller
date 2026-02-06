@@ -2,6 +2,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from ament_index_python.packages import get_package_share_directory
 import os
 
@@ -12,12 +13,10 @@ def generate_launch_description():
         DeclareLaunchArgument('robotName', default_value='mobile_manipulator'),
         DeclareLaunchArgument('tt_params', default_value=os.path.join(
             get_package_share_directory('mpc_cartesian_planner'), 'config', 'tt_params.yaml')),
-        
         DeclareLaunchArgument("taskFile", default_value=""),
         DeclareLaunchArgument("libFolder", default_value=""),
         DeclareLaunchArgument("urdfFile", default_value=""),
-        DeclareLaunchArgument("globalFrame", default_value=""),
-        
+        DeclareLaunchArgument("globalFrame", default_value=""),  
     ]
 
     tt_pub = Node(
