@@ -16,6 +16,7 @@ def generate_launch_description():
         DeclareLaunchArgument("taskFile", default_value=""),
         DeclareLaunchArgument("libFolder", default_value=""),
         DeclareLaunchArgument("urdfFile", default_value=""),
+        DeclareLaunchArgument("globalFrame", default_value=""),
         
     ]
 
@@ -30,6 +31,7 @@ def generate_launch_description():
                      "taskFile": LaunchConfiguration("taskFile"),
                      "libFolder": LaunchConfiguration("libFolder"),
                      "urdfFile": LaunchConfiguration("urdfFile"),
+                     "trajectoryGlobalFrame": LaunchConfiguration("globalFrame"),
                     },
                     ],
     )
@@ -45,6 +47,7 @@ def generate_launch_description():
                      "taskFile": LaunchConfiguration("taskFile"),
                      "libFolder": LaunchConfiguration("libFolder"),
                      "urdfFile": LaunchConfiguration("urdfFile"),
+                     "trajectoryGlobalFrame": LaunchConfiguration("globalFrame"),
                     },
                     ],
     )

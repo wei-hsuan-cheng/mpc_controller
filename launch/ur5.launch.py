@@ -138,10 +138,12 @@ def generate_launch_description():
             ])
         ),
         launch_arguments={
+            "tt_params": LaunchConfiguration("tt_params"),
             "robotName": LaunchConfiguration("robotName"),
             "taskFile": LaunchConfiguration("taskFile"),
             "libFolder": LaunchConfiguration("libFolder"),
             "urdfFile": LaunchConfiguration("urdfFile"),
+            "globalFrame": LaunchConfiguration("globalFrame"),
         }.items(),
     )
 
