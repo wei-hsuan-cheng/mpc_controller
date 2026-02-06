@@ -61,6 +61,10 @@ def generate_launch_description():
         DeclareLaunchArgument("baseY0", default_value=base_y_default),
         DeclareLaunchArgument("baseYaw0", default_value=base_yaw_default),
         DeclareLaunchArgument("commandType", default_value="marker"),
+        # --- TT launch switches / args (cartesian planner) ---
+        DeclareLaunchArgument('robotName', default_value='mobile_manipulator'),
+        DeclareLaunchArgument('tt_params', default_value=os.path.join(
+            get_package_share_directory('mpc_cartesian_planner'), 'config', 'tt_params.yaml')),
     ]
 
     robot_description_content = Command(
@@ -181,6 +185,23 @@ def generate_launch_description():
         }.items(),
     )
 
+    # Trajectory tracking launcher
+    tt_dir = PathJoinSubstitution([FindPackageShare("mpc_controller"), "launch", "command"])
+    tt_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([
+                tt_dir,
+                PythonExpression(["'cartesian_tt.launch.py'"]),
+            ])
+        ),
+        launch_arguments={
+            "robotName": LaunchConfiguration("robotName"),
+            "taskFile": LaunchConfiguration("taskFile"),
+            "libFolder": LaunchConfiguration("libFolder"),
+            "urdfFile": LaunchConfiguration("urdfFile"),
+        }.items(),
+    )
+
     visualize_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([mpc_share, "launch", "visualization", "visualize.launch.py"])
@@ -201,6 +222,7 @@ def generate_launch_description():
             mpc_node,
             ros2_control_node,
             controller_sequence,
-            command_launch,
+            # command_launch,
+            tt_launch,
         ]
     )
