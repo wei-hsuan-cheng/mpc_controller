@@ -325,6 +325,7 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   last_base_cmd_ = vector_t::Zero(static_cast<Eigen::Index>(base_input_dim_));
   last_arm_pos_cmd_.assign(static_cast<size_t>(info.armDim), 0.0);
 
+  last_arm_vel_cmd_.assign(static_cast<size_t>(info.armDim), 0.0);
   // ---- pubs/subs: only enable what is meaningful ----
   if (model_type_ == ManipulatorModelType::WheelBasedMobileManipulator) {
     base_cmd_pub_ = node->create_publisher<geometry_msgs::msg::Twist>(
@@ -391,6 +392,7 @@ controller_interface::CallbackReturn OCS2Controller::on_activate(const rclcpp_li
   // init LPF memory to current
   const size_t arm_dim = arm_joint_names_.size();
   last_arm_pos_cmd_.resize(arm_dim, 0.0);
+  last_arm_vel_cmd_.assign(arm_dim, 0.0);
   for (size_t i = 0; i < arm_dim; ++i) {
     const Eigen::Index si = static_cast<Eigen::Index>(arm_state_offset_ + i);
     if (si < initial_observation_.state.size()) {
@@ -706,6 +708,7 @@ void OCS2Controller::applyHoldCommand(const SystemObservation & observation)
       if (si < observation.state.size()) {
         joint_position_commands_[i]->set_value(observation.state(si));
         if (i < last_arm_pos_cmd_.size()) last_arm_pos_cmd_[i] = observation.state(si);
+        if (i < last_arm_vel_cmd_.size()) last_arm_vel_cmd_[i] = 0.0;
       }
     }
   }
@@ -746,6 +749,7 @@ void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const v
     if (joint_position_commands_.size() < arm_dim) return;
     if (last_arm_pos_cmd_.size() != arm_dim) last_arm_pos_cmd_.assign(arm_dim, 0.0);
 
+    if (last_arm_vel_cmd_.size() != arm_dim) last_arm_vel_cmd_.assign(arm_dim, 0.0);
     // ensure sane dt for integration
     dt_sec = std::max(1e-6, dt_sec);
 
@@ -766,11 +770,11 @@ void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const v
         const Eigen::Index ui = static_cast<Eigen::Index>(arm_input_offset_ + i);
         if (ui >= u_end.size()) continue;
 
-        const double dq_cmd = u_end(ui);
-        const double q_int = last_arm_pos_cmd_[i] + dq_cmd * dt_sec;
-        // Same LPF form as state mode: blend new integrated position with previous cmd
-        const double q_cmd = a * q_int + (1.0 - a) * last_arm_pos_cmd_[i];
+        const double dq_raw = u_end(ui);
+        const double dq_cmd = a * dq_raw + (1.0 - a) * last_arm_vel_cmd_[i];
+        last_arm_vel_cmd_[i] = dq_cmd;
 
+        const double q_cmd = last_arm_pos_cmd_[i] + dq_cmd * dt_sec;
         last_arm_pos_cmd_[i] = q_cmd;
         joint_position_commands_[i]->set_value(q_cmd);
       }
