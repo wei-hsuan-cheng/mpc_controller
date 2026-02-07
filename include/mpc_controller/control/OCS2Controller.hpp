@@ -141,6 +141,7 @@ private:
   // Arm command conversion
   std::string arm_command_mode_str_{"state"};
   ArmCommandMode arm_command_mode_{ArmCommandMode::kState};
+  bool integrate_u_use_measured_state_{true};
 
   double mpc_desired_frequency_{100.0};
   double mrt_desired_frequency_{250.0};

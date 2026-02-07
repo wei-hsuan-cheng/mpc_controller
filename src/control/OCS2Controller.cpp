@@ -227,6 +227,7 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   // --- arm command mode ---
   arm_command_mode_str_ = getParamAsString(node, "armCommandMode", "state");
   arm_command_mode_ = parseArmCommandMode(arm_command_mode_str_);
+  integrate_u_use_measured_state_ = getParamAsBool(node, "integrateUUseMeasuredState", true);
 
   command_smoothing_alpha_ = std::clamp(command_smoothing_alpha_, 0.0, 1.0);
   policy_time_tolerance_factor_ = std::clamp(policy_time_tolerance_factor_, 0.0, 10.0);
@@ -767,9 +768,16 @@ void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const v
         if (ui >= u_end.size()) continue;
 
         const double dq_cmd = u_end(ui);
-        const double q_int = last_arm_pos_cmd_[i] + dq_cmd * dt_sec;
-        // Same LPF form as state mode: blend new integrated position with previous cmd
-        const double q_cmd = a * q_int + (1.0 - a) * last_arm_pos_cmd_[i];
+        double q_base = last_arm_pos_cmd_[i];
+        if (integrate_u_use_measured_state_) {
+          if (i < joint_position_states_.size() && joint_position_states_[i] != nullptr) {
+            q_base = joint_position_states_[i]->get_value();
+          }
+        }
+
+        const double q_int = q_base + dq_cmd * dt_sec;
+        // Same LPF form as state mode: blend new integrated position with previous value.
+        const double q_cmd = a * q_int + (1.0 - a) * q_base;
 
         last_arm_pos_cmd_[i] = q_cmd;
         joint_position_commands_[i]->set_value(q_cmd);
