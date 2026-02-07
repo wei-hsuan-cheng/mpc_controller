@@ -42,6 +42,7 @@ mpc_controller:
       - ur_arm_wrist_3_joint
     
     armCommandMode: "integrate_u"   # "integrate_u" or "state"
+    integrateUUseMeasuredState: true  # integrate_u: use joint position feedback as integration base
 
     # Arm command mode
     use_moveit_servo: false

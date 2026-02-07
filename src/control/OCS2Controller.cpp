@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -227,6 +229,7 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   // --- arm command mode ---
   arm_command_mode_str_ = getParamAsString(node, "armCommandMode", "state");
   arm_command_mode_ = parseArmCommandMode(arm_command_mode_str_);
+  integrate_u_use_measured_state_ = getParamAsBool(node, "integrateUUseMeasuredState", true);
 
   command_smoothing_alpha_ = std::clamp(command_smoothing_alpha_, 0.0, 1.0);
   policy_time_tolerance_factor_ = std::clamp(policy_time_tolerance_factor_, 0.0, 10.0);
@@ -282,9 +285,10 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
 
   RCLCPP_INFO(
     node->get_logger(),
-    "[OCS2Controller] modelType=%d | stateDim=%d inputDim=%d | base_state_dim=%zu base_input_dim=%zu | arm_state_offset=%zu arm_input_offset=%zu | armCommandMode=%s",
+    "[OCS2Controller] modelType=%d | stateDim=%d inputDim=%d | base_state_dim=%zu base_input_dim=%zu | arm_state_offset=%zu arm_input_offset=%zu | armCommandMode=%s | integrateUUseMeasuredState=%s",
     static_cast<int>(model_type_), state_dim_, input_dim_,
-    base_state_dim_, base_input_dim_, arm_state_offset_, arm_input_offset_, arm_command_mode_str_.c_str());
+    base_state_dim_, base_input_dim_, arm_state_offset_, arm_input_offset_, arm_command_mode_str_.c_str(),
+    integrate_u_use_measured_state_ ? "true" : "false");
 
   // --- visualization (optional) ---
   try {
@@ -549,10 +553,65 @@ void OCS2Controller::maybeLogPerf()
   perf_update_policy_ms_sum_ = 0.0;
 }
 
-controller_interface::return_type OCS2Controller::update(const rclcpp::Time &, const rclcpp::Duration &)
+controller_interface::return_type OCS2Controller::update(const rclcpp::Time & time, const rclcpp::Duration & period)
 {
   if (!handles_initialized_ || !mrt_) {
     return controller_interface::return_type::ERROR;
+  }
+
+  // NOTE:
+  // - OCS2 observation time here is the controller's "virtual_time_" (seconds), not ROS time.
+  // - `time`/`period` come from ros2_control's update loop; `get_node()->now()` is the node clock.
+  // - This log helps detect drift between the configured MPC/MRT dt and the actual update period.
+  {
+    struct TimeDiagState {
+      bool inited{false};
+      double update0{0.0};
+      double node0{0.0};
+      double ocs20{0.0};
+      double last_update{0.0};
+      double last_node{0.0};
+      double last_ocs2{0.0};
+    };
+    static TimeDiagState diag;
+
+    const double ocs2_sec = virtual_time_;
+    const double update_sec = time.seconds();
+    const double node_sec = get_node()->now().seconds();
+    const double period_sec = period.seconds();
+
+    // Reset baseline if OCS2 time jumps backwards (e.g., controller re-activated).
+    const bool reset = (!diag.inited) || (ocs2_sec + 1e-9 < diag.last_ocs2);
+    if (reset) {
+      diag.inited = true;
+      diag.update0 = update_sec;
+      diag.node0 = node_sec;
+      diag.ocs20 = ocs2_sec;
+      diag.last_update = update_sec;
+      diag.last_node = node_sec;
+      diag.last_ocs2 = ocs2_sec;
+    }
+
+    const double update_rel = update_sec - diag.update0;
+    const double node_rel = node_sec - diag.node0;
+    const double ocs2_rel = ocs2_sec - diag.ocs20;
+    const double drift_update_minus_ocs2 = update_rel - ocs2_rel;
+
+    const double dt_update = update_sec - diag.last_update;
+    const double dt_node = node_sec - diag.last_node;
+    const double dt_ocs2 = ocs2_sec - diag.last_ocs2;
+
+    RCLCPP_INFO_THROTTLE(
+      get_node()->get_logger(), steady_clock_, 2000,
+      "[time] rel: update=%.3f node=%.3f ocs2=%.3f drift(update-ocs2)=%.3f | "
+      "dt: period=%.4f update=%.4f node=%.4f ocs2=%.4f (mrt_dt=%.4f) | node-update=%.6f",
+      update_rel, node_rel, ocs2_rel, drift_update_minus_ocs2,
+      period_sec, dt_update, dt_node, dt_ocs2, mrt_dt_,
+      node_sec - update_sec);
+
+    diag.last_update = update_sec;
+    diag.last_node = node_sec;
+    diag.last_ocs2 = ocs2_sec;
   }
 
   mrt_->spinMRT();
@@ -749,30 +808,121 @@ void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const v
     // ensure sane dt for integration
     dt_sec = std::max(1e-6, dt_sec);
 
-    if (arm_command_mode_ == ArmCommandMode::kState) {
-      // MODE: state -> position
-      for (size_t i = 0; i < arm_dim; ++i) {
-        const Eigen::Index si = static_cast<Eigen::Index>(arm_state_offset_ + i);
-        if (si >= x_next.size()) continue;
+    // Compute both command candidates (state vs integrate_u) for comparison/logging,
+    // and select which one to send to hardware at the end.
+    static std::vector<double> q_target_state;
+    static std::vector<double> q_target_int;
+    static std::vector<double> q_cmd_state;
+    static std::vector<double> q_cmd_int;
+    static std::vector<double> q_meas;
+    static std::vector<double> q_prev_cmd;
 
+    q_target_state.assign(arm_dim, NAN);
+    q_target_int.assign(arm_dim, NAN);
+    q_cmd_state.assign(arm_dim, NAN);
+    q_cmd_int.assign(arm_dim, NAN);
+    q_meas.assign(arm_dim, NAN);
+    q_prev_cmd.assign(arm_dim, NAN);
+
+    for (size_t i = 0; i < arm_dim; ++i) {
+      const double q_prev = last_arm_pos_cmd_[i];
+      const double q_cur =
+        (i < joint_position_states_.size() && joint_position_states_[i] != nullptr)
+          ? joint_position_states_[i]->get_value()
+          : q_prev;
+
+      q_meas[i] = q_cur;
+      q_prev_cmd[i] = q_prev;
+
+      const Eigen::Index si = static_cast<Eigen::Index>(arm_state_offset_ + i);
+      if (si < x_next.size()) {
         const double q_next = x_next(si);
-        const double q_cmd = a * q_next + (1.0 - a) * last_arm_pos_cmd_[i];
-        last_arm_pos_cmd_[i] = q_cmd;
-        joint_position_commands_[i]->set_value(q_cmd);
+        q_target_state[i] = q_next;
+        q_cmd_state[i] = a * q_next + (1.0 - a) * q_prev;
       }
-    } else {
-      // MODE: integrate_u -> position
-      for (size_t i = 0; i < arm_dim; ++i) {
-        const Eigen::Index ui = static_cast<Eigen::Index>(arm_input_offset_ + i);
-        if (ui >= u_end.size()) continue;
 
+      const Eigen::Index ui = static_cast<Eigen::Index>(arm_input_offset_ + i);
+      if (ui < u_end.size()) {
         const double dq_cmd = u_end(ui);
-        const double q_int = last_arm_pos_cmd_[i] + dq_cmd * dt_sec;
-        // Same LPF form as state mode: blend new integrated position with previous cmd
-        const double q_cmd = a * q_int + (1.0 - a) * last_arm_pos_cmd_[i];
+        const double q_int = (integrate_u_use_measured_state_ ? q_cur : q_prev) + dq_cmd * dt_sec;
+        q_target_int[i] = q_int;
+        // Same LPF form as state mode: blend new integrated position with a base value.
+        // If using measured-state integration, blend against measurement to avoid running ahead of the plant.
+        const double blend_base = integrate_u_use_measured_state_ ? q_cur : q_prev;
+        q_cmd_int[i] = a * q_int + (1.0 - a) * blend_base;
+      }
+    }
 
-        last_arm_pos_cmd_[i] = q_cmd;
-        joint_position_commands_[i]->set_value(q_cmd);
+    const bool use_state = (arm_command_mode_ == ArmCommandMode::kState);
+    const auto& q_send = use_state ? q_cmd_state : q_cmd_int;
+
+    for (size_t i = 0; i < arm_dim; ++i) {
+      if (!std::isfinite(q_send[i])) continue;
+      last_arm_pos_cmd_[i] = q_send[i];
+      joint_position_commands_[i]->set_value(q_send[i]);
+    }
+
+    // Throttled comparison log (state vs integrate_u).
+    {
+      static rclcpp::Time last_log{0, 0, RCL_STEADY_TIME};
+      const auto now = steady_clock_.now();
+      if ((now - last_log).seconds() >= 2.0) {
+        last_log = now;
+
+        std::vector<double> delta_target(arm_dim, NAN);
+        std::vector<double> delta_cmd(arm_dim, NAN);
+        std::vector<double> delta_prev_cmd_minus_meas(arm_dim, NAN);
+        double max_abs_cmd_diff = 0.0;
+        double max_abs_target_diff = 0.0;
+        double max_abs_prev_cmd_minus_meas = 0.0;
+        for (size_t i = 0; i < arm_dim; ++i) {
+          if (std::isfinite(q_target_state[i]) && std::isfinite(q_target_int[i])) {
+            delta_target[i] = q_target_state[i] - q_target_int[i];
+            max_abs_target_diff = std::max(max_abs_target_diff, std::abs(delta_target[i]));
+          }
+          if (std::isfinite(q_cmd_state[i]) && std::isfinite(q_cmd_int[i])) {
+            delta_cmd[i] = q_cmd_state[i] - q_cmd_int[i];
+            max_abs_cmd_diff = std::max(max_abs_cmd_diff, std::abs(delta_cmd[i]));
+          }
+          if (std::isfinite(q_prev_cmd[i]) && std::isfinite(q_meas[i])) {
+            delta_prev_cmd_minus_meas[i] = q_prev_cmd[i] - q_meas[i];
+            max_abs_prev_cmd_minus_meas =
+              std::max(max_abs_prev_cmd_minus_meas, std::abs(delta_prev_cmd_minus_meas[i]));
+          }
+        }
+
+        auto append_vec = [](std::ostringstream& oss, const char* label, const std::vector<double>& v) {
+          oss << " " << label << "=[";
+          for (size_t i = 0; i < v.size(); ++i) {
+            if (i > 0) oss << ", ";
+            if (std::isfinite(v[i])) {
+              oss << v[i];
+            } else {
+              oss << "nan";
+            }
+          }
+          oss << "]";
+        };
+
+        std::ostringstream oss;
+        oss.setf(std::ios::fixed);
+        oss << std::setprecision(4);
+        oss << "[arm cmd cmp] dt=" << dt_sec << " [s] a=" << a << " mode=" << arm_command_mode_str_
+            << " integrateUUseMeasuredState=" << (integrate_u_use_measured_state_ ? "true" : "false")
+            << " max|prev_cmd-meas|=" << max_abs_prev_cmd_minus_meas
+            << " max|target(state-int)|=" << max_abs_target_diff
+            << " max|cmd(state-int)|=" << max_abs_cmd_diff;
+        append_vec(oss, "q_meas", q_meas);
+        append_vec(oss, "q_prev_cmd", q_prev_cmd);
+        append_vec(oss, "q_state", q_target_state);
+        append_vec(oss, "q_int", q_target_int);
+        append_vec(oss, "q_cmd_state", q_cmd_state);
+        append_vec(oss, "q_cmd_int", q_cmd_int);
+        append_vec(oss, "delta_prev_cmd_minus_meas", delta_prev_cmd_minus_meas);
+        append_vec(oss, "delta_target(state-int)", delta_target);
+        append_vec(oss, "delta_cmd(state-int)", delta_cmd);
+
+        RCLCPP_INFO(get_node()->get_logger(), "%s", oss.str().c_str());
       }
     }
   }
