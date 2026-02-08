@@ -55,6 +55,8 @@ def generate_launch_description():
         DeclareLaunchArgument("controllersFile", default_value=controllers_default),
         DeclareLaunchArgument("globalFrame", default_value="odom"),
         DeclareLaunchArgument("baseCmdTopic", default_value="/cmd_vel"),
+        DeclareLaunchArgument("baseCmdTimeout", default_value="0.25", description="Base cmd_vel timeout [sec] for fake odom / watchdog."),
+        DeclareLaunchArgument("warnOnBaseCmdTimeout", default_value="true", description="Warn once when cmd_vel times out."),
         DeclareLaunchArgument("odomTopic", default_value="/odom"),
         DeclareLaunchArgument("initialPoseFile", default_value=initial_pose_default),
         DeclareLaunchArgument("baseX0", default_value=base_x_default),
@@ -65,6 +67,9 @@ def generate_launch_description():
         DeclareLaunchArgument('robotName', default_value='mobile_manipulator'),
         DeclareLaunchArgument('tt_params', default_value=os.path.join(
             get_package_share_directory('mpc_cartesian_planner'), 'config', 'tt_params.yaml')),
+        DeclareLaunchArgument("publishZeroBaseCmdOnIntervention", default_value="true"),
+        DeclareLaunchArgument("zeroBaseCmdBurstCount", default_value="10"),
+        DeclareLaunchArgument("zeroBaseCmdBurstRate", default_value="50.0"),
     ]
 
     robot_description_content = Command(
@@ -145,6 +150,8 @@ def generate_launch_description():
                 "frame_id": LaunchConfiguration("globalFrame"),
                 "child_frame_id": "base_link",
                 "publish_rate": ParameterValue(LaunchConfiguration("mrtFreq"), value_type=float),
+                "cmd_vel_timeout": ParameterValue(LaunchConfiguration("baseCmdTimeout"), value_type=float),
+                "warn_on_timeout": ParameterValue(LaunchConfiguration("warnOnBaseCmdTimeout"), value_type=bool),
                 "x0": LaunchConfiguration("baseX0"),
                 "y0": LaunchConfiguration("baseY0"),
                 "yaw0": LaunchConfiguration("baseYaw0"),
@@ -201,6 +208,10 @@ def generate_launch_description():
             "libFolder": LaunchConfiguration("libFolder"),
             "urdfFile": LaunchConfiguration("urdfFile"),
             "globalFrame": LaunchConfiguration("globalFrame"),
+            "baseCmdTopic": LaunchConfiguration("baseCmdTopic"),
+            "publishZeroBaseCmdOnIntervention": LaunchConfiguration("publishZeroBaseCmdOnIntervention"),
+            "zeroBaseCmdBurstCount": LaunchConfiguration("zeroBaseCmdBurstCount"),
+            "zeroBaseCmdBurstRate": LaunchConfiguration("zeroBaseCmdBurstRate"),
         }.items(),
     )
 

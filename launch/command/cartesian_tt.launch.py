@@ -16,7 +16,11 @@ def generate_launch_description():
         DeclareLaunchArgument("taskFile", default_value=""),
         DeclareLaunchArgument("libFolder", default_value=""),
         DeclareLaunchArgument("urdfFile", default_value=""),
-        DeclareLaunchArgument("globalFrame", default_value=""),  
+        DeclareLaunchArgument("globalFrame", default_value=""),
+        DeclareLaunchArgument("baseCmdTopic", default_value="/cmd_vel"),
+        DeclareLaunchArgument("publishZeroBaseCmdOnIntervention", default_value="true"),
+        DeclareLaunchArgument("zeroBaseCmdBurstCount", default_value="10"),
+        DeclareLaunchArgument("zeroBaseCmdBurstRate", default_value="50.0"),
     ]
 
     tt_pub = Node(
@@ -31,6 +35,10 @@ def generate_launch_description():
                      "libFolder": LaunchConfiguration("libFolder"),
                      "urdfFile": LaunchConfiguration("urdfFile"),
                      "trajectoryGlobalFrame": LaunchConfiguration("globalFrame"),
+                     "baseCmdTopic": LaunchConfiguration("baseCmdTopic"),
+                     "publishZeroBaseCmdOnIntervention": ParameterValue(LaunchConfiguration("publishZeroBaseCmdOnIntervention"), value_type=bool),
+                     "zeroBaseCmdBurstCount": ParameterValue(LaunchConfiguration("zeroBaseCmdBurstCount"), value_type=int),
+                     "zeroBaseCmdBurstRate": ParameterValue(LaunchConfiguration("zeroBaseCmdBurstRate"), value_type=float),
                     },
                     ],
     )
