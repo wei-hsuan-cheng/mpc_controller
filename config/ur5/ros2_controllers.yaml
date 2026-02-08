@@ -47,3 +47,7 @@ mpc_controller:
     # Arm command mode
     use_moveit_servo: false
     joint_jog_topic: /servo_controller/delta_joint_cmds
+
+    # Base IO (no use in arm-only mode, but required for mobile manipulator)
+    base_cmd_topic: "$(var baseCmdTopic)"
+    odom_topic: "$(var odomTopic)"

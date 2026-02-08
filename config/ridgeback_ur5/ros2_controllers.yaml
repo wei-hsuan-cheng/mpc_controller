@@ -43,11 +43,11 @@ mpc_controller:
 
     armCommandMode: "integrate_u"   # "integrate_u" or "state"
     integrateUUseMeasuredState: true  # integrate_u: use joint position feedback as integration base
-    
-    # Base IO (you can remap these to your ridgeback stack)
-    base_cmd_topic: "$(var baseCmdTopic)"
-    odom_topic: "$(var odomTopic)"
 
     # Arm command mode
     use_moveit_servo: false
     joint_jog_topic: /servo_controller/delta_joint_cmds
+
+    # Base IO (no use in arm-only mode, but required for mobile manipulator)
+    base_cmd_topic: "$(var baseCmdTopic)"
+    odom_topic: "$(var odomTopic)"
