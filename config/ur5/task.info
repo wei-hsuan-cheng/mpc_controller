@@ -276,7 +276,14 @@ selfCollision
   ; Self Collision raw object pairs
   collisionObjectPairs
   {
-    [0] "1, 3"
+    //[0] "1, 3"
+  }
+
+  ; Self Collision pairs
+  collisionLinkPairs
+  {
+    [0] "ur_arm_shoulder_link, ur_arm_wrist_3_link"
+    //[1] "ur_arm_shoulder_link, ur_arm_forearm_link"
   }
 
   ; minimum distance allowed between the pairs

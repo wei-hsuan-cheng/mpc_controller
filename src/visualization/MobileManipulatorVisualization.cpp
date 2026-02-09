@@ -6,6 +6,8 @@
 #include <array>
 #include <utility>
 
+#include <string>
+
 #include <boost/property_tree/info_parser.hpp>
 #include <boost/property_tree/ptree.hpp>
 
@@ -68,9 +70,13 @@ void MobileManipulatorVisualization::launchVisualizerNode(const std::string &tas
 
   if (activate_self_collision) {
     auto viz_pinocchio = createPinocchioInterface(urdf_file, model_type, remove_joint_names_);
-    std::vector<std::pair<size_t, size_t>> collision_pairs;
-    ocs2::loadData::loadStdVectorOfPair(task_file, "selfCollision.collisionObjectPairs", collision_pairs, true);
-    ocs2::PinocchioGeometryInterface geom_interface(viz_pinocchio, collision_pairs);
+
+    std::vector<std::pair<size_t, size_t>> collision_object_pairs;
+    std::vector<std::pair<std::string, std::string>> collision_link_pairs;
+    ocs2::loadData::loadStdVectorOfPair(task_file, "selfCollision.collisionObjectPairs", collision_object_pairs, true);
+    ocs2::loadData::loadStdVectorOfPair(task_file, "selfCollision.collisionLinkPairs", collision_link_pairs, true);
+
+    ocs2::PinocchioGeometryInterface geom_interface(viz_pinocchio, collision_link_pairs, collision_object_pairs);
     geometry_visualization_ = std::make_unique<GeometryInterfaceVisualization>(
         std::move(viz_pinocchio), std::move(geom_interface), global_frame_);
   }
