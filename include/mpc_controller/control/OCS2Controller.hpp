@@ -22,8 +22,8 @@
 #include <ocs2_core/Types.h>
 #include <ocs2_core/reference/TargetTrajectories.h>
 #include <ocs2_mpc/SystemObservation.h>
-#include <ocs2_mobile_manipulator/MobileManipulatorInterface.h>
-#include <ocs2_mobile_manipulator/ManipulatorModelInfo.h>  // <-- for ManipulatorModelType
+#include <mobile_manipulator_mpc/MobileManipulatorInterface.h>
+#include <mobile_manipulator_mpc/ManipulatorModelInfo.h>  // <-- for ManipulatorModelType
 #include <ocs2_ros_interfaces/mrt/MRT_ROS_Interface.h>
 
 #include "mpc_controller/visualization/MobileManipulatorVisualization.h"
@@ -55,8 +55,8 @@ private:
   using vector_t = ocs2::vector_t;
   using SystemObservation = ocs2::SystemObservation;
   using TargetTrajectories = ocs2::TargetTrajectories;
-  using MobileManipulatorInterface = ocs2::mobile_manipulator::MobileManipulatorInterface;
-  using ManipulatorModelType = ocs2::mobile_manipulator::ManipulatorModelType;
+  using MobileManipulatorInterface = ocs2::mobile_manipulator_mpc::MobileManipulatorInterface;
+  using ManipulatorModelType = ocs2::mobile_manipulator_mpc::ManipulatorModelType;
 
   enum class LoopMode { kAuto, kSynchronized, kRealtime };
 

@@ -20,7 +20,7 @@ find_package(ocs2_core REQUIRED)
 find_package(ocs2_mpc REQUIRED)
 find_package(ocs2_sqp REQUIRED)
 find_package(ocs2_ros_interfaces REQUIRED)
-find_package(ocs2_mobile_manipulator REQUIRED)
+find_package(mobile_manipulator_mpc REQUIRED)
 find_package(ocs2_self_collision_visualization REQUIRED)
 find_package(ocs2_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
@@ -55,7 +55,7 @@ ament_target_dependencies(${PROJECT_NAME}
   ocs2_mpc
   ocs2_sqp
   ocs2_ros_interfaces
-  ocs2_mobile_manipulator
+  mobile_manipulator_mpc
   ocs2_self_collision_visualization
 )
 
@@ -63,7 +63,7 @@ pluginlib_export_plugin_description_file(controller_interface mpc_controller_plu
 
 set(OCS2_CONTROL_NODE_DEPENDENCIES
   rclcpp
-  ocs2_mobile_manipulator
+  mobile_manipulator_mpc
   ocs2_sqp
   ocs2_ros_interfaces
   ocs2_msgs
@@ -163,7 +163,7 @@ ament_export_dependencies(
   ocs2_mpc
   ocs2_sqp
   ocs2_ros_interfaces
-  ocs2_mobile_manipulator
+  mobile_manipulator_mpc
   ocs2_self_collision_visualization
   ocs2_msgs
   std_srvs

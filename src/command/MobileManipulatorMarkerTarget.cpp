@@ -36,8 +36,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/info_parser.hpp>
 #include <ocs2_core/misc/LoadData.h>
-#include <ocs2_mobile_manipulator/ManipulatorModelInfo.h>
-#include <ocs2_mobile_manipulator/MobileManipulatorInterface.h>
+#include <mobile_manipulator_mpc/ManipulatorModelInfo.h>
+#include <mobile_manipulator_mpc/MobileManipulatorInterface.h>
 #include <ocs2_ros_interfaces/common/RosMsgConversions.h>
 #include <ocs2_msgs/msg/mpc_observation.hpp>
 #include <std_srvs/srv/set_bool.hpp>
@@ -49,7 +49,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <geometry_msgs/msg/transform_stamped.hpp>
 
 using namespace ocs2;
-using namespace ocs2::mobile_manipulator;
+using namespace ocs2::mobile_manipulator_mpc;
 
 namespace {
 

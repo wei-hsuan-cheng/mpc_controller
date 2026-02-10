@@ -13,8 +13,8 @@
 
 #include <ocs2_core/misc/LoadData.h>
 #include <ocs2_core/misc/LoadStdVectorOfPair.h>
-#include <ocs2_mobile_manipulator/AccessHelperFunctions.h>
-#include <ocs2_mobile_manipulator/FactoryFunctions.h>
+#include <mobile_manipulator_mpc/AccessHelperFunctions.h>
+#include <mobile_manipulator_mpc/FactoryFunctions.h>
 #include <ocs2_ros_interfaces/common/RosMsgHelpers.h>
 
 #include <geometry_msgs/msg/transform_stamped.hpp>
@@ -27,12 +27,12 @@ using ocs2::CommandData;
 using ocs2::GeometryInterfaceVisualization;
 using ocs2::PrimalSolution;
 using ocs2::TargetTrajectories;
-using ocs2::mobile_manipulator::ManipulatorModelInfo;
-using ocs2::mobile_manipulator::MobileManipulatorInterface;
-using ocs2::mobile_manipulator::createPinocchioInterface;
-using ocs2::mobile_manipulator::getArmJointAngles;
-using ocs2::mobile_manipulator::getBaseOrientation;
-using ocs2::mobile_manipulator::getBasePosition;
+using ocs2::mobile_manipulator_mpc::ManipulatorModelInfo;
+using ocs2::mobile_manipulator_mpc::MobileManipulatorInterface;
+using ocs2::mobile_manipulator_mpc::createPinocchioInterface;
+using ocs2::mobile_manipulator_mpc::getArmJointAngles;
+using ocs2::mobile_manipulator_mpc::getBaseOrientation;
+using ocs2::mobile_manipulator_mpc::getBasePosition;
 
 namespace {
 constexpr double kTrajectoryLineWidth = 0.005;
@@ -62,7 +62,7 @@ void MobileManipulatorVisualization::launchVisualizerNode(const std::string &tas
   boost::property_tree::ptree pt;
   boost::property_tree::read_info(task_file, pt);
 
-  const auto model_type = ocs2::mobile_manipulator::loadManipulatorType(task_file, "model_information.manipulatorModelType");
+  const auto model_type = ocs2::mobile_manipulator_mpc::loadManipulatorType(task_file, "model_information.manipulatorModelType");
   ocs2::loadData::loadStdVector<std::string>(task_file, "model_information.removeJoints", remove_joint_names_, false);
 
   bool activate_self_collision = true;

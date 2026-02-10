@@ -18,8 +18,8 @@
 
 #include "rclcpp/rclcpp.hpp"
 
-#include <ocs2_mobile_manipulator/MobileManipulatorInterface.h>
-#include <ocs2_mobile_manipulator/ManipulatorModelInfo.h>
+#include <mobile_manipulator_mpc/MobileManipulatorInterface.h>
+#include <mobile_manipulator_mpc/ManipulatorModelInfo.h>
 
 #include <ocs2_core/reference/TargetTrajectories.h>
 #include <ocs2_mpc/SystemObservation.h>
@@ -32,7 +32,7 @@
 #include <pinocchio/algorithm/kinematics.hpp>
 
 using namespace ocs2;
-using namespace ocs2::mobile_manipulator;
+using namespace ocs2::mobile_manipulator_mpc;
 
 namespace {
 
