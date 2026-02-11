@@ -137,10 +137,14 @@ void MobileManipulatorVisualization::publishOptimizedTrajectory(const rclcpp::Ti
 
   const auto &model = pinocchio_interface_.getModel();
   auto &data = pinocchio_interface_.getData();
+  const Eigen::Index nq = static_cast<Eigen::Index>(model.nq);
   const auto ee_id = model.getBodyId(model_info_.eeFrame);
 
   for (const auto &state : policy.stateTrajectory_) {
-    pinocchio::forwardKinematics(model, data, state);
+    if (state.size() < nq) {
+      continue;
+    }
+    pinocchio::forwardKinematics(model, data, state.head(nq));
     pinocchio::updateFramePlacements(model, data);
     const auto &transform = data.oMf[ee_id];
     geometry_msgs::msg::Pose ee_pose;
@@ -176,7 +180,11 @@ void MobileManipulatorVisualization::update(const ocs2::vector_t &current_state,
   publishOptimizedTrajectory(stamp, policy);
 
   if (geometry_visualization_) {
-    geometry_visualization_->publishDistances(current_state);
+    const auto &model = pinocchio_interface_.getModel();
+    const Eigen::Index nq = static_cast<Eigen::Index>(model.nq);
+    if (current_state.size() >= nq) {
+      geometry_visualization_->publishDistances(current_state.head(nq));
+    }
   }
 }
 

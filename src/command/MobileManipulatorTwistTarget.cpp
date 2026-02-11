@@ -136,7 +136,11 @@ class TwistTargetNode : public rclcpp::Node {
         const auto &pin = interface_->getPinocchioInterface();
         const auto &model = pin.getModel();
         auto data = pin.getData();
-        pinocchio::forwardKinematics(model, data, obs.state);
+        const Eigen::Index nq = static_cast<Eigen::Index>(model.nq);
+        if (obs.state.size() < nq) {
+          throw std::runtime_error("observation state too small for Pinocchio model.");
+        }
+        pinocchio::forwardKinematics(model, data, obs.state.head(nq));
         pinocchio::updateFramePlacements(model, data);
         const auto &info = interface_->getManipulatorModelInfo();
         const auto ee_id = model.getFrameId(info.eeFrame);

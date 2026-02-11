@@ -181,12 +181,17 @@ private:
   // ===== Dimensions / buffers =====
   int state_dim_{0};
   int input_dim_{0};
+  size_t system_state_dim_{0};
+  size_t system_input_dim_{0};
+  bool acceleration_control_{false};
 
   SystemObservation initial_observation_;
   TargetTrajectories initial_target_;
 
   // last OCS2 input used in obs.input
   vector_t last_command_;
+  // last commanded system velocity (used as velocity state when acceleration_control_ is enabled)
+  vector_t last_system_velocity_;
 
   // ===== Model-dependent layout =====
   ManipulatorModelType model_type_{ManipulatorModelType::WheelBasedMobileManipulator};

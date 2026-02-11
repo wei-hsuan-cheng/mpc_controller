@@ -278,13 +278,18 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   }
 
   const auto & info = interface_->getManipulatorModelInfo();
-  state_dim_ = info.stateDim;
-  input_dim_ = info.inputDim;
+  system_state_dim_ = info.stateDim;
+  system_input_dim_ = info.inputDim;
+  acceleration_control_ = interface_->isAccelerationControlEnabled();
+
+  state_dim_ = static_cast<int>(interface_->getMpcStateDim());
+  input_dim_ = static_cast<int>(interface_->getMpcInputDim());
 
   RCLCPP_INFO(
     node->get_logger(),
-    "[OCS2Controller] modelType=%d | stateDim=%d inputDim=%d | base_state_dim=%zu base_input_dim=%zu | arm_state_offset=%zu arm_input_offset=%zu | armCommandMode=%s",
-    static_cast<int>(model_type_), state_dim_, input_dim_,
+    "[OCS2Controller] modelType=%d | systemStateDim=%zu systemInputDim=%zu | mpcStateDim=%d mpcInputDim=%d | accelControl=%s | base_state_dim=%zu base_input_dim=%zu | arm_state_offset=%zu arm_input_offset=%zu | armCommandMode=%s",
+    static_cast<int>(model_type_), system_state_dim_, system_input_dim_, state_dim_, input_dim_,
+    acceleration_control_ ? "true" : "false",
     base_state_dim_, base_input_dim_, arm_state_offset_, arm_input_offset_, arm_command_mode_str_.c_str());
 
   // --- visualization (optional) ---
@@ -323,6 +328,7 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   initial_target_ = TargetTrajectories();
 
   last_command_ = vector_t::Zero(input_dim_);
+  last_system_velocity_ = vector_t::Zero(static_cast<Eigen::Index>(system_input_dim_));
   last_base_cmd_ = vector_t::Zero(static_cast<Eigen::Index>(base_input_dim_));
   last_arm_pos_cmd_.assign(static_cast<size_t>(info.armDim), 0.0);
 
@@ -698,6 +704,7 @@ void OCS2Controller::applyHoldCommand(const SystemObservation & observation)
     base_cmd_pub_->publish(cmd);
   }
   if (last_base_cmd_.size() > 0) last_base_cmd_.setZero();
+  if (last_system_velocity_.size() > 0) last_system_velocity_.setZero();
 
   // arm hold
   const size_t arm_dim = arm_joint_names_.size();
@@ -717,19 +724,42 @@ void OCS2Controller::applyHoldCommand(const SystemObservation & observation)
 void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const vector_t & x_next, double dt_sec)
 {
   const double a = command_smoothing_alpha_;
+  const Eigen::Index sys_state_dim = static_cast<Eigen::Index>(system_state_dim_);
+  const Eigen::Index sys_input_dim = static_cast<Eigen::Index>(system_input_dim_);
+
+  // System velocity to command (u_sys). In accelControl mode, MPC input is acceleration and
+  // the velocity lives in the augmented state tail (loopshaping integrator).
+  vector_t u_sys = u_end;
+  if (acceleration_control_) {
+    if (x_next.size() >= sys_state_dim + sys_input_dim) {
+      u_sys = x_next.segment(sys_state_dim, sys_input_dim);
+    } else if (u_end.size() == sys_input_dim && last_system_velocity_.size() == sys_input_dim) {
+      dt_sec = std::max(1e-6, dt_sec);
+      u_sys = last_system_velocity_ + u_end * dt_sec;
+    } else {
+      u_sys = vector_t::Zero(sys_input_dim);
+    }
+
+    if (last_system_velocity_.size() == sys_input_dim && u_sys.size() == sys_input_dim) {
+      last_system_velocity_ = u_sys;
+    }
+  }
 
   // base LPF (vel) only for wheel-based
   if (model_type_ == ManipulatorModelType::WheelBasedMobileManipulator) {
     vector_t u_base = vector_t::Zero(2);
-    if (u_end.size() >= 2) {
-      u_base(0) = u_end(0);
-      u_base(1) = u_end(1);
+    if (u_sys.size() >= 2) {
+      u_base(0) = u_sys(0);
+      u_base(1) = u_sys(1);
     }
 
     if (last_base_cmd_.size() != 2) last_base_cmd_ = vector_t::Zero(2);
 
     const vector_t blended_base = a * u_base + (1.0 - a) * last_base_cmd_;
     last_base_cmd_ = blended_base;
+    if (last_system_velocity_.size() == sys_input_dim && sys_input_dim >= 2) {
+      last_system_velocity_.head<2>() = blended_base;
+    }
 
     if (base_cmd_pub_) {
       geometry_msgs::msg::Twist cmd;
@@ -765,9 +795,9 @@ void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const v
       // MODE: integrate_u -> position
       for (size_t i = 0; i < arm_dim; ++i) {
         const Eigen::Index ui = static_cast<Eigen::Index>(arm_input_offset_ + i);
-        if (ui >= u_end.size()) continue;
+        if (ui >= u_sys.size()) continue;
 
-        const double dq_cmd = u_end(ui);
+        const double dq_cmd = u_sys(ui);
         double q_base = last_arm_pos_cmd_[i];
         if (integrate_u_use_measured_state_) {
           if (i < joint_position_states_.size() && joint_position_states_[i] != nullptr) {
@@ -778,6 +808,15 @@ void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const v
         const double q_int = q_base + dq_cmd * dt_sec;
         // Same LPF form as state mode: blend new integrated position with previous value.
         const double q_cmd = a * q_int + (1.0 - a) * q_base;
+
+        if (acceleration_control_ && last_system_velocity_.size() == sys_input_dim) {
+          // Back-compute effective dq from commanded position increment to keep
+          // the MPC's velocity state consistent with what is actually applied.
+          const double dq_eff = (q_cmd - q_base) / dt_sec;
+          if (ui < last_system_velocity_.size()) {
+            last_system_velocity_(ui) = dq_eff;
+          }
+        }
 
         last_arm_pos_cmd_[i] = q_cmd;
         joint_position_commands_[i]->set_value(q_cmd);
@@ -825,6 +864,14 @@ SystemObservation OCS2Controller::buildObservation(double time_sec) const
     }
   }
 
+  // velocity state (loopshaping integrator) for acceleration-level MPC
+  if (acceleration_control_ && last_system_velocity_.size() == static_cast<Eigen::Index>(system_input_dim_)) {
+    const Eigen::Index sys_state_dim = static_cast<Eigen::Index>(system_state_dim_);
+    if (obs.state.size() >= sys_state_dim + last_system_velocity_.size()) {
+      obs.state.segment(sys_state_dim, last_system_velocity_.size()) = last_system_velocity_;
+    }
+  }
+
   return obs;
 }
 
@@ -839,7 +886,11 @@ TargetTrajectories OCS2Controller::computeInitialTarget(const vector_t & state, 
   // NOTE:
   // state dimension here matches the pinocchio model created by MobileManipulatorInterface
   // for each manipulatorModelType, so forwardKinematics(model,data,state) is consistent.
-  pinocchio::forwardKinematics(model, data, state);
+  const Eigen::Index nq = static_cast<Eigen::Index>(model.nq);
+  if (state.size() < nq) {
+    throw std::runtime_error("[OCS2Controller] computeInitialTarget: state too small for Pinocchio model.");
+  }
+  pinocchio::forwardKinematics(model, data, state.head(nq));
   pinocchio::updateFramePlacements(model, data);
 
   const auto & info = interface_->getManipulatorModelInfo();

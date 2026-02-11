@@ -206,6 +206,170 @@ inputCost
   }
 }
 
+; Optional: Acceleration-level control.
+; If enabled, MPC input becomes acceleration `a` and the loopshaping integrator enforces:
+;   v_k = v_{k-1} + dt * a_k
+; The system input applied to the robot remains velocity `v`.
+accelerationControl
+{
+  activate  false
+}
+
+; Optional: Acceleration input cost (only used if accelerationControl.activate = true).
+; Same structure as inputCost.R, but applies to acceleration instead of velocity.
+accelerationCost
+{
+  R
+  {
+    base
+    {
+      defaultManipulator
+      {
+      }
+
+      floatingArmManipulator
+      {
+      }
+
+      fullyActuatedFloatingArmManipulator
+      {
+      }
+
+      wheelBasedMobileManipulator
+      {
+      }
+    }
+
+    arm
+    {
+      scaling 1e-3
+
+      (0,0)  1.0  ; ur_arm_shoulder_pan_joint acceleration
+      (1,1)  1.0  ; ur_arm_shoulder_lift_joint acceleration
+      (2,2)  1.0  ; ur_arm_elbow_joint acceleration
+      (3,3)  1.0  ; ur_arm_wrist_1_joint acceleration
+      (4,4)  1.0  ; ur_arm_wrist_2_joint acceleration
+      (5,5)  1.0  ; ur_arm_wrist_3_joint acceleration
+    }
+  }
+}
+
+; Optional: Joint-space acceleration limits (soft) on acceleration input `a`.
+; Only applied if accelerationControl.activate = true.
+jointAccelerationLimits
+{
+  activate  false
+
+  ; relaxed log barrier mu / delta
+  mu      0.01
+  delta   1e-3
+
+  ; If set, the limit is only active in the listed mode numbers.
+  ;activeModes
+  ;{
+  ;  [0] 0
+  ;}
+
+  lowerBound
+  {
+    base
+    {
+      defaultManipulator
+      {
+      }
+
+      floatingArmManipulator
+      {
+      }
+
+      fullyActuatedFloatingArmManipulator
+      {
+      }
+
+      wheelBasedMobileManipulator
+      {
+      }
+    }
+
+    arm
+    {
+      (0,0)  -10.0  ; [rad/s^2]
+      (1,0)  -10.0
+      (2,0)  -10.0
+      (3,0)  -10.0
+      (4,0)  -10.0
+      (5,0)  -10.0
+    }
+  }
+
+  upperBound
+  {
+    base
+    {
+      defaultManipulator
+      {
+      }
+
+      floatingArmManipulator
+      {
+      }
+
+      fullyActuatedFloatingArmManipulator
+      {
+      }
+
+      wheelBasedMobileManipulator
+      {
+      }
+    }
+
+    arm
+    {
+      (0,0)  10.0  ; [rad/s^2]
+      (1,0)  10.0
+      (2,0)  10.0
+      (3,0)  10.0
+      (4,0)  10.0
+      (5,0)  10.0
+    }
+  }
+}
+
+; Optional: End-effector Cartesian (linear) acceleration limits (soft) in WORLD frame.
+; Only applied if accelerationControl.activate = true.
+cartesianAccelerationLimits
+{
+  activate  false
+
+  ; end-effector frame name (defaults to model_information.eeFrame)
+  frame  "ur_arm_tool0"
+
+  ; relaxed log barrier mu / delta
+  mu      0.01
+  delta   1e-3
+
+  ; If set, the limit is only active in the listed mode numbers.
+  ;activeModes
+  ;{
+  ;  [0] 0
+  ;}
+
+  ; Linear acceleration bounds [m/s^2] for (ax, ay, az)
+  lowerBound
+  {
+    (0,0)  -2.0
+    (1,0)  -2.0
+    (2,0)  -2.0
+  }
+
+  upperBound
+  {
+    (0,0)  2.0
+    (1,0)  2.0
+    (2,0)  2.0
+  }
+}
+
 jointTracking
 {
   activate  true

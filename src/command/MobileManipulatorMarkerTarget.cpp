@@ -28,6 +28,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ******************************************************************************/
 
 #include <chrono>
+#include <stdexcept>
 #include <utility>
 
 #include <ocs2_ros_interfaces/command/UnifiedTargetTrajectoriesInteractiveMarker.h>
@@ -289,7 +290,11 @@ int main(int argc, char* argv[]) {
             const auto& pin = interfacePtr->getPinocchioInterface();
             const auto& model = pin.getModel();
             auto data = pin.getData();
-            pinocchio::forwardKinematics(model, data, latestObs.state);
+            const Eigen::Index nq = static_cast<Eigen::Index>(model.nq);
+            if (latestObs.state.size() < nq) {
+              throw std::runtime_error("observation state too small for Pinocchio model.");
+            }
+            pinocchio::forwardKinematics(model, data, latestObs.state.head(nq));
             pinocchio::updateFramePlacements(model, data);
 
             const auto& info = interfacePtr->getManipulatorModelInfo();
@@ -327,7 +332,11 @@ int main(int argc, char* argv[]) {
                 const auto& pin = interfacePtr->getPinocchioInterface();
                 const auto& model = pin.getModel();
                 auto data = pin.getData();
-                pinocchio::forwardKinematics(model, data, latestObs.state);
+                const Eigen::Index nq = static_cast<Eigen::Index>(model.nq);
+                if (latestObs.state.size() < nq) {
+                  throw std::runtime_error("observation state too small for Pinocchio model.");
+                }
+                pinocchio::forwardKinematics(model, data, latestObs.state.head(nq));
                 pinocchio::updateFramePlacements(model, data);
                 const auto& info = interfacePtr->getManipulatorModelInfo();
 
@@ -422,7 +431,11 @@ int main(int argc, char* argv[]) {
           const auto& pin = interfacePtr->getPinocchioInterface();
           const auto& model = pin.getModel();
           auto data = pin.getData();
-          pinocchio::forwardKinematics(model, data, latestObs.state);
+          const Eigen::Index nq = static_cast<Eigen::Index>(model.nq);
+          if (latestObs.state.size() < nq) {
+            throw std::runtime_error("observation state too small for Pinocchio model.");
+          }
+          pinocchio::forwardKinematics(model, data, latestObs.state.head(nq));
           pinocchio::updateFramePlacements(model, data);
 
           const auto& info = interfacePtr->getManipulatorModelInfo();
@@ -452,7 +465,11 @@ int main(int argc, char* argv[]) {
               const auto& pin = interfacePtr->getPinocchioInterface();
               const auto& model = pin.getModel();
               auto data = pin.getData();
-              pinocchio::forwardKinematics(model, data, latestObs.state);
+              const Eigen::Index nq = static_cast<Eigen::Index>(model.nq);
+              if (latestObs.state.size() < nq) {
+                throw std::runtime_error("observation state too small for Pinocchio model.");
+              }
+              pinocchio::forwardKinematics(model, data, latestObs.state.head(nq));
               pinocchio::updateFramePlacements(model, data);
               const auto& info = interfacePtr->getManipulatorModelInfo();
               const auto ee_id = model.getFrameId(info.eeFrame);
