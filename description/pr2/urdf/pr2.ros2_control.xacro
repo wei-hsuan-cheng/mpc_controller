@@ -1,0 +1,514 @@
+<?xml version="1.0"?>
+<robot name="pr2_ros2_control" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:arg name="use_fake_hardware" default="true"/>
+  <xacro:arg name="initial_pose_file" default=""/>
+
+  <xacro:property name="use_fake_hardware" value="$(arg use_fake_hardware)"/>
+
+  <xacro:property name="initial_pose_file" value="$(arg initial_pose_file)"/>
+  <xacro:property name="initial_pose" value="${xacro.load_yaml(initial_pose_file)}"/>
+  <xacro:property name="arm_init" value="${initial_pose['arm_joints']}"/>
+
+  <!-- Minimal link tree for ros2_control (joint names must match the PR2 URDF & task.info) -->
+  <link name="base_footprint"/>
+  <link name="torso_lift_link"/>
+
+  <!-- Base casters (placeholders to publish joint states) -->
+  <link name="fl_caster_rotation_link"/>
+  <link name="fl_caster_l_wheel_link"/>
+  <link name="fl_caster_r_wheel_link"/>
+  <link name="fr_caster_rotation_link"/>
+  <link name="fr_caster_l_wheel_link"/>
+  <link name="fr_caster_r_wheel_link"/>
+  <link name="bl_caster_rotation_link"/>
+  <link name="bl_caster_l_wheel_link"/>
+  <link name="bl_caster_r_wheel_link"/>
+  <link name="br_caster_rotation_link"/>
+  <link name="br_caster_l_wheel_link"/>
+  <link name="br_caster_r_wheel_link"/>
+
+  <!-- Head / sensors (placeholders to publish joint states) -->
+  <link name="head_pan_link"/>
+  <link name="head_tilt_link"/>
+  <link name="laser_tilt_mount_link"/>
+
+  <joint name="torso_lift_joint" type="prismatic">
+    <parent link="base_footprint"/>
+    <child link="torso_lift_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0.0" upper="0.4" effort="100" velocity="1.0"/>
+  </joint>
+
+  <!-- Base caster joints (publish states for full PR2 TF tree) -->
+  <joint name="fl_caster_rotation_joint" type="continuous">
+    <parent link="base_footprint"/>
+    <child link="fl_caster_rotation_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="fl_caster_l_wheel_joint" type="continuous">
+    <parent link="fl_caster_rotation_link"/>
+    <child link="fl_caster_l_wheel_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+  <joint name="fl_caster_r_wheel_joint" type="continuous">
+    <parent link="fl_caster_rotation_link"/>
+    <child link="fl_caster_r_wheel_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <joint name="fr_caster_rotation_joint" type="continuous">
+    <parent link="base_footprint"/>
+    <child link="fr_caster_rotation_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="fr_caster_l_wheel_joint" type="continuous">
+    <parent link="fr_caster_rotation_link"/>
+    <child link="fr_caster_l_wheel_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+  <joint name="fr_caster_r_wheel_joint" type="continuous">
+    <parent link="fr_caster_rotation_link"/>
+    <child link="fr_caster_r_wheel_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <joint name="bl_caster_rotation_joint" type="continuous">
+    <parent link="base_footprint"/>
+    <child link="bl_caster_rotation_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="bl_caster_l_wheel_joint" type="continuous">
+    <parent link="bl_caster_rotation_link"/>
+    <child link="bl_caster_l_wheel_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+  <joint name="bl_caster_r_wheel_joint" type="continuous">
+    <parent link="bl_caster_rotation_link"/>
+    <child link="bl_caster_r_wheel_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <joint name="br_caster_rotation_joint" type="continuous">
+    <parent link="base_footprint"/>
+    <child link="br_caster_rotation_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="br_caster_l_wheel_joint" type="continuous">
+    <parent link="br_caster_rotation_link"/>
+    <child link="br_caster_l_wheel_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+  <joint name="br_caster_r_wheel_joint" type="continuous">
+    <parent link="br_caster_rotation_link"/>
+    <child link="br_caster_r_wheel_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <!-- Head joints (publish states for full PR2 TF tree) -->
+  <joint name="head_pan_joint" type="revolute">
+    <parent link="torso_lift_link"/>
+    <child link="head_pan_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-6.283" upper="6.283" effort="10" velocity="3"/>
+  </joint>
+
+  <joint name="head_tilt_joint" type="revolute">
+    <parent link="head_pan_link"/>
+    <child link="head_tilt_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-6.283" upper="6.283" effort="10" velocity="3"/>
+  </joint>
+
+  <joint name="laser_tilt_mount_joint" type="revolute">
+    <parent link="torso_lift_link"/>
+    <child link="laser_tilt_mount_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-6.283" upper="6.283" effort="10" velocity="3"/>
+  </joint>
+
+  <!-- Left arm chain -->
+  <link name="l_shoulder_pan_link"/>
+  <link name="l_shoulder_lift_link"/>
+  <link name="l_upper_arm_roll_link"/>
+  <link name="l_elbow_flex_link"/>
+  <link name="l_forearm_roll_link"/>
+  <link name="l_wrist_flex_link"/>
+  <link name="l_wrist_roll_link"/>
+
+  <!-- Grippers (placeholders to publish joint states) -->
+  <link name="l_gripper_palm_link"/>
+  <link name="l_gripper_motor_slider_link"/>
+  <link name="l_gripper_motor_screw_link"/>
+  <link name="l_gripper_l_finger_link"/>
+  <link name="l_gripper_r_finger_link"/>
+  <link name="l_gripper_l_finger_tip_frame"/>
+
+  <joint name="l_shoulder_pan_joint" type="revolute">
+    <parent link="torso_lift_link"/>
+    <child link="l_shoulder_pan_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-6.283" upper="6.283" effort="50" velocity="3"/>
+  </joint>
+  <joint name="l_shoulder_lift_joint" type="revolute">
+    <parent link="l_shoulder_pan_link"/>
+    <child link="l_shoulder_lift_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-6.283" upper="6.283" effort="50" velocity="3"/>
+  </joint>
+  <joint name="l_upper_arm_roll_joint" type="revolute">
+    <parent link="l_shoulder_lift_link"/>
+    <child link="l_upper_arm_roll_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-6.283" upper="6.283" effort="50" velocity="3"/>
+  </joint>
+  <joint name="l_elbow_flex_joint" type="revolute">
+    <parent link="l_upper_arm_roll_link"/>
+    <child link="l_elbow_flex_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-6.283" upper="6.283" effort="50" velocity="3"/>
+  </joint>
+  <joint name="l_forearm_roll_joint" type="revolute">
+    <parent link="l_elbow_flex_link"/>
+    <child link="l_forearm_roll_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-6.283" upper="6.283" effort="50" velocity="3"/>
+  </joint>
+  <joint name="l_wrist_flex_joint" type="revolute">
+    <parent link="l_forearm_roll_link"/>
+    <child link="l_wrist_flex_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-6.283" upper="6.283" effort="50" velocity="3"/>
+  </joint>
+  <joint name="l_wrist_roll_joint" type="revolute">
+    <parent link="l_wrist_flex_link"/>
+    <child link="l_wrist_roll_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-6.283" upper="6.283" effort="50" velocity="3"/>
+  </joint>
+
+  <!-- Left gripper (publish states for TF completeness) -->
+  <joint name="l_gripper_palm_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="l_wrist_roll_link"/>
+    <child link="l_gripper_palm_link"/>
+  </joint>
+
+  <joint name="l_gripper_motor_slider_joint" type="prismatic">
+    <origin xyz="0.16828 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <parent link="l_gripper_palm_link"/>
+    <child link="l_gripper_motor_slider_link"/>
+    <limit effort="1000.0" lower="-0.1" upper="0.1" velocity="0.2"/>
+  </joint>
+
+  <joint name="l_gripper_motor_screw_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="l_gripper_motor_slider_link"/>
+    <child link="l_gripper_motor_screw_link"/>
+  </joint>
+
+  <!-- Left gripper fingers (publish states for TF completeness) -->
+  <joint name="l_gripper_l_finger_joint" type="revolute">
+    <parent link="l_gripper_palm_link"/>
+    <child link="l_gripper_l_finger_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0.0" upper="0.548" effort="1000.0" velocity="0.5"/>
+  </joint>
+  <joint name="l_gripper_r_finger_joint" type="revolute">
+    <parent link="l_gripper_palm_link"/>
+    <child link="l_gripper_r_finger_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0.0" upper="0.548" effort="1000.0" velocity="0.5"/>
+  </joint>
+
+  <!-- Gripper gap joint (publish state for l_gripper_l_finger_tip_frame TF) -->
+  <joint name="l_gripper_joint" type="prismatic">
+    <parent link="l_gripper_palm_link"/>
+    <child link="l_gripper_l_finger_tip_frame"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="1000.0" lower="0.0" upper="0.09" velocity="0.2"/>
+  </joint>
+
+  <!-- Right arm chain -->
+  <link name="r_shoulder_pan_link"/>
+  <link name="r_shoulder_lift_link"/>
+  <link name="r_upper_arm_roll_link"/>
+  <link name="r_elbow_flex_link"/>
+  <link name="r_forearm_roll_link"/>
+  <link name="r_wrist_flex_link"/>
+  <link name="r_wrist_roll_link"/>
+
+  <link name="r_gripper_palm_link"/>
+  <link name="r_gripper_motor_slider_link"/>
+  <link name="r_gripper_motor_screw_link"/>
+  <link name="r_gripper_l_finger_link"/>
+  <link name="r_gripper_r_finger_link"/>
+  <link name="r_gripper_l_finger_tip_frame"/>
+
+  <joint name="r_shoulder_pan_joint" type="revolute">
+    <parent link="torso_lift_link"/>
+    <child link="r_shoulder_pan_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-6.283" upper="6.283" effort="50" velocity="3"/>
+  </joint>
+  <joint name="r_shoulder_lift_joint" type="revolute">
+    <parent link="r_shoulder_pan_link"/>
+    <child link="r_shoulder_lift_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-6.283" upper="6.283" effort="50" velocity="3"/>
+  </joint>
+  <joint name="r_upper_arm_roll_joint" type="revolute">
+    <parent link="r_shoulder_lift_link"/>
+    <child link="r_upper_arm_roll_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-6.283" upper="6.283" effort="50" velocity="3"/>
+  </joint>
+  <joint name="r_elbow_flex_joint" type="revolute">
+    <parent link="r_upper_arm_roll_link"/>
+    <child link="r_elbow_flex_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-6.283" upper="6.283" effort="50" velocity="3"/>
+  </joint>
+  <joint name="r_forearm_roll_joint" type="revolute">
+    <parent link="r_elbow_flex_link"/>
+    <child link="r_forearm_roll_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-6.283" upper="6.283" effort="50" velocity="3"/>
+  </joint>
+  <joint name="r_wrist_flex_joint" type="revolute">
+    <parent link="r_forearm_roll_link"/>
+    <child link="r_wrist_flex_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-6.283" upper="6.283" effort="50" velocity="3"/>
+  </joint>
+  <joint name="r_wrist_roll_joint" type="revolute">
+    <parent link="r_wrist_flex_link"/>
+    <child link="r_wrist_roll_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-6.283" upper="6.283" effort="50" velocity="3"/>
+  </joint>
+
+  <!-- Right gripper (publish states for TF completeness) -->
+  <joint name="r_gripper_palm_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="r_wrist_roll_link"/>
+    <child link="r_gripper_palm_link"/>
+  </joint>
+
+  <joint name="r_gripper_motor_slider_joint" type="prismatic">
+    <origin xyz="0.16828 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <parent link="r_gripper_palm_link"/>
+    <child link="r_gripper_motor_slider_link"/>
+    <limit effort="1000.0" lower="-0.1" upper="0.1" velocity="0.2"/>
+  </joint>
+
+  <joint name="r_gripper_motor_screw_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <parent link="r_gripper_motor_slider_link"/>
+    <child link="r_gripper_motor_screw_link"/>
+  </joint>
+
+  <!-- Right gripper fingers (publish states for TF completeness) -->
+  <joint name="r_gripper_l_finger_joint" type="revolute">
+    <parent link="r_gripper_palm_link"/>
+    <child link="r_gripper_l_finger_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0.0" upper="0.548" effort="1000.0" velocity="0.5"/>
+  </joint>
+  <joint name="r_gripper_r_finger_joint" type="revolute">
+    <parent link="r_gripper_palm_link"/>
+    <child link="r_gripper_r_finger_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0.0" upper="0.548" effort="1000.0" velocity="0.5"/>
+  </joint>
+
+  <!-- Gripper gap joint (publish state for r_gripper_l_finger_tip_frame TF) -->
+  <joint name="r_gripper_joint" type="prismatic">
+    <parent link="r_gripper_palm_link"/>
+    <child link="r_gripper_l_finger_tip_frame"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit effort="1000.0" lower="0.0" upper="0.09" velocity="0.2"/>
+  </joint>
+
+  <ros2_control name="Pr2DualArmSystem" type="system">
+    <hardware>
+      <xacro:if value="${use_fake_hardware}">
+        <plugin>mock_components/GenericSystem</plugin>
+        <param name="mock_sensor_commands">false</param>
+        <param name="calculate_dynamics">true</param>
+        <param name="position_state_following_offset">0.0</param>
+      </xacro:if>
+    </hardware>
+
+    <!-- Torso -->
+    <joint name="torso_lift_joint">
+      <command_interface name="position"/>
+      <state_interface name="position">
+        <param name="initial_value">${arm_init.get('torso_lift_joint', 0.0)}</param>
+      </state_interface>
+    </joint>
+
+    <!-- Head / sensors (not commanded by MPC, but publish joint_states for TF) -->
+
+    <joint name="head_pan_joint">
+      <state_interface name="position">
+        <param name="initial_value">${arm_init.get('head_pan_joint', 0.0)}</param>
+      </state_interface>
+    </joint>
+
+    <joint name="head_tilt_joint">
+      <state_interface name="position">
+        <param name="initial_value">${arm_init.get('head_tilt_joint', 0.0)}</param>
+      </state_interface>
+    </joint>
+
+    <joint name="laser_tilt_mount_joint">
+      <state_interface name="position">
+        <param name="initial_value">${arm_init.get('laser_tilt_mount_joint', 0.0)}</param>
+      </state_interface>
+    </joint>
+
+    <!-- Gripper motor sliders (not commanded by MPC, publish joint_states for TF) -->
+
+    <joint name="l_gripper_motor_slider_joint">
+      <state_interface name="position">
+        <param name="initial_value">${arm_init.get('l_gripper_motor_slider_joint', 0.0)}</param>
+      </state_interface>
+    </joint>
+
+    <joint name="r_gripper_motor_slider_joint">
+      <state_interface name="position">
+        <param name="initial_value">${arm_init.get('r_gripper_motor_slider_joint', 0.0)}</param>
+      </state_interface>
+    </joint>
+
+    <!-- Base casters (not commanded by MPC, publish joint_states for TF) -->
+
+    <joint name="fl_caster_rotation_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('fl_caster_rotation_joint', 0.0)}</param></state_interface></joint>
+    <joint name="fl_caster_l_wheel_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('fl_caster_l_wheel_joint', 0.0)}</param></state_interface></joint>
+    <joint name="fl_caster_r_wheel_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('fl_caster_r_wheel_joint', 0.0)}</param></state_interface></joint>
+
+    <joint name="fr_caster_rotation_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('fr_caster_rotation_joint', 0.0)}</param></state_interface></joint>
+    <joint name="fr_caster_l_wheel_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('fr_caster_l_wheel_joint', 0.0)}</param></state_interface></joint>
+    <joint name="fr_caster_r_wheel_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('fr_caster_r_wheel_joint', 0.0)}</param></state_interface></joint>
+
+    <joint name="bl_caster_rotation_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('bl_caster_rotation_joint', 0.0)}</param></state_interface></joint>
+    <joint name="bl_caster_l_wheel_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('bl_caster_l_wheel_joint', 0.0)}</param></state_interface></joint>
+    <joint name="bl_caster_r_wheel_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('bl_caster_r_wheel_joint', 0.0)}</param></state_interface></joint>
+
+    <joint name="br_caster_rotation_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('br_caster_rotation_joint', 0.0)}</param></state_interface></joint>
+    <joint name="br_caster_l_wheel_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('br_caster_l_wheel_joint', 0.0)}</param></state_interface></joint>
+    <joint name="br_caster_r_wheel_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('br_caster_r_wheel_joint', 0.0)}</param></state_interface></joint>
+
+    <!-- Gripper fingers (not commanded by MPC, publish joint_states for TF) -->
+
+    <joint name="l_gripper_l_finger_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('l_gripper_l_finger_joint', 0.0)}</param></state_interface></joint>
+    <joint name="l_gripper_r_finger_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('l_gripper_r_finger_joint', 0.0)}</param></state_interface></joint>
+    <joint name="r_gripper_l_finger_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('r_gripper_l_finger_joint', 0.0)}</param></state_interface></joint>
+    <joint name="r_gripper_r_finger_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('r_gripper_r_finger_joint', 0.0)}</param></state_interface></joint>
+
+    <!-- Gripper gap joints (not commanded by MPC, publish joint_states for TF) -->
+
+    <joint name="l_gripper_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('l_gripper_joint', 0.0)}</param></state_interface></joint>
+    <joint name="r_gripper_joint"><state_interface name="position"><param name="initial_value">${arm_init.get('r_gripper_joint', 0.0)}</param></state_interface></joint>
+
+    <!-- Left arm -->
+    <joint name="l_shoulder_pan_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">${arm_init.get('l_shoulder_pan_joint', 0.0)}</param></state_interface>
+    </joint>
+    <joint name="l_shoulder_lift_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">${arm_init.get('l_shoulder_lift_joint', 0.0)}</param></state_interface>
+    </joint>
+    <joint name="l_upper_arm_roll_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">${arm_init.get('l_upper_arm_roll_joint', 0.0)}</param></state_interface>
+    </joint>
+    <joint name="l_elbow_flex_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">${arm_init.get('l_elbow_flex_joint', 0.0)}</param></state_interface>
+    </joint>
+    <joint name="l_forearm_roll_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">${arm_init.get('l_forearm_roll_joint', 0.0)}</param></state_interface>
+    </joint>
+    <joint name="l_wrist_flex_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">${arm_init.get('l_wrist_flex_joint', 0.0)}</param></state_interface>
+    </joint>
+    <joint name="l_wrist_roll_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">${arm_init.get('l_wrist_roll_joint', 0.0)}</param></state_interface>
+    </joint>
+
+    <!-- Right arm -->
+    <joint name="r_shoulder_pan_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">${arm_init.get('r_shoulder_pan_joint', 0.0)}</param></state_interface>
+    </joint>
+    <joint name="r_shoulder_lift_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">${arm_init.get('r_shoulder_lift_joint', 0.0)}</param></state_interface>
+    </joint>
+    <joint name="r_upper_arm_roll_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">${arm_init.get('r_upper_arm_roll_joint', 0.0)}</param></state_interface>
+    </joint>
+    <joint name="r_elbow_flex_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">${arm_init.get('r_elbow_flex_joint', 0.0)}</param></state_interface>
+    </joint>
+    <joint name="r_forearm_roll_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">${arm_init.get('r_forearm_roll_joint', 0.0)}</param></state_interface>
+    </joint>
+    <joint name="r_wrist_flex_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">${arm_init.get('r_wrist_flex_joint', 0.0)}</param></state_interface>
+    </joint>
+    <joint name="r_wrist_roll_joint">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">${arm_init.get('r_wrist_roll_joint', 0.0)}</param></state_interface>
+    </joint>
+  </ros2_control>
+
+</robot>

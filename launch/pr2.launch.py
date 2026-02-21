@@ -1,0 +1,210 @@
+import os
+import yaml
+
+from ament_index_python.packages import get_package_share_directory
+from launch import LaunchDescription
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription
+from launch.conditions import IfCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution, PythonExpression
+from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterFile, ParameterValue
+from launch_ros.substitutions import FindPackageShare
+
+
+def generate_launch_description():
+    mpc_share = FindPackageShare("mpc_controller")
+    mpc_share_dir = get_package_share_directory("mpc_controller")
+    initial_pose_default = os.path.join(mpc_share_dir, "config", "pr2", "initial_pose.yaml")
+    try:
+        with open(initial_pose_default, "r") as f:
+            initial_pose_cfg = yaml.safe_load(f) or {}
+    except Exception:
+        initial_pose_cfg = {}
+    base_cfg = (initial_pose_cfg.get("base") or {})
+    base_x_default = str(base_cfg.get("x", 0.0))
+    base_y_default = str(base_cfg.get("y", 0.0))
+    base_yaw_default = str(base_cfg.get("yaw", 0.0))
+
+    rviz_default = os.path.join(mpc_share_dir, "config", "rviz", "mobile_manipulator.rviz")
+
+    task_default = PathJoinSubstitution([mpc_share, "config", "pr2", "task.info"])
+    urdf_default = PathJoinSubstitution([mpc_share, "description", "pr2", "urdf", "pr2.urdf"])
+    controllers_default = PathJoinSubstitution([mpc_share, "config", "pr2", "ros2_controllers.yaml"])
+    ros2_control_xacro = PathJoinSubstitution([mpc_share, "description", "pr2", "urdf", "pr2.ros2_control.xacro"])
+
+    declared_arguments = [
+        DeclareLaunchArgument("rviz", default_value="true"),
+        DeclareLaunchArgument("rvizconfig", default_value=rviz_default),
+        DeclareLaunchArgument("use_fake_hardware", default_value="true"),
+        DeclareLaunchArgument("use_fake_odom", default_value="true"),
+        DeclareLaunchArgument("solver", default_value="ddp", description="MPC solver: ddp or sqp"),
+        DeclareLaunchArgument("taskFile", default_value=task_default),
+        DeclareLaunchArgument(
+            "urdfFile",
+            default_value=urdf_default,
+            description="Robot URDF used by OCS2 (set explicitly if ocs2_robotic_assets is not installed).",
+        ),
+        DeclareLaunchArgument("libFolder", default_value="/tmp/ocs2_auto_generated/pr2"),
+        DeclareLaunchArgument("loopMode", default_value="auto", description="auto / sync / rt"),
+        DeclareLaunchArgument("mpcFreq", default_value="100", description="MPC update frequency (integer)"),
+        DeclareLaunchArgument("mrtFreq", default_value="250", description="MRT update frequency (integer)"),
+        DeclareLaunchArgument("perfLogPeriod", default_value="2.0", description="Performance log period [sec]"),
+        DeclareLaunchArgument("controllersFile", default_value=controllers_default),
+        DeclareLaunchArgument("globalFrame", default_value="odom"),
+        DeclareLaunchArgument("baseCmdTopic", default_value="/cmd_vel"),
+        DeclareLaunchArgument(
+            "baseCmdTimeout",
+            default_value="0.25",
+            description="Base cmd_vel timeout [sec] for fake odom / watchdog.",
+        ),
+        DeclareLaunchArgument(
+            "warnOnBaseCmdTimeout",
+            default_value="true",
+            description="Warn once when cmd_vel times out.",
+        ),
+        DeclareLaunchArgument("odomTopic", default_value="/odom"),
+        DeclareLaunchArgument("initialPoseFile", default_value=initial_pose_default),
+        DeclareLaunchArgument("baseX0", default_value=base_x_default),
+        DeclareLaunchArgument("baseY0", default_value=base_y_default),
+        DeclareLaunchArgument("baseYaw0", default_value=base_yaw_default),
+        DeclareLaunchArgument("commandType", default_value="marker"),
+    ]
+
+    robot_description_content = Command(
+        [
+            PathJoinSubstitution([FindExecutable(name="xacro")]),
+            " ",
+            ros2_control_xacro,
+            " ",
+            "use_fake_hardware:=",
+            LaunchConfiguration("use_fake_hardware"),
+            " ",
+            "initial_pose_file:=",
+            LaunchConfiguration("initialPoseFile"),
+        ]
+    )
+    robot_description = {"robot_description": ParameterValue(robot_description_content, value_type=str)}
+
+    ros2_control_node = Node(
+        package="controller_manager",
+        executable="ros2_control_node",
+        output="screen",
+        parameters=[
+            robot_description,
+            ParameterFile(LaunchConfiguration("controllersFile"), allow_substs=True),
+        ],
+    )
+
+    controller_sequence_script = PathJoinSubstitution(
+        [FindPackageShare("mpc_controller"), "launch", "controller_sequence.py"]
+    )
+    controller_sequence = ExecuteProcess(
+        cmd=[
+            "python3",
+            controller_sequence_script,
+            "--controller-manager",
+            "/controller_manager",
+            "--robot-description-topic",
+            "/robot_description",
+            "--timeout",
+            "120",
+        ],
+        output="screen",
+    )
+
+    # MPC node: select executable based on solver argument
+    mpc_solver = LaunchConfiguration("solver")
+    mpc_executable_name = PythonExpression(
+        ["'mobile_manipulator_mpc_node' if '", mpc_solver, "' == 'ddp' else 'mobile_manipulator_sqp_mpc_node'"]
+    )
+    mpc_node = Node(
+        package="mpc_controller",
+        executable=mpc_executable_name,
+        name="mobile_manipulator_mpc",
+        output="screen",
+        parameters=[
+            {
+                "taskFile": LaunchConfiguration("taskFile"),
+                "urdfFile": LaunchConfiguration("urdfFile"),
+                "libFolder": LaunchConfiguration("libFolder"),
+            }
+        ],
+    )
+
+    # Fake odom for wheel-based base
+    fake_odom_node = Node(
+        package="mpc_controller",
+        executable="fake_base_odom_node",
+        name="fake_base_odom",
+        output="screen",
+        condition=IfCondition(LaunchConfiguration("use_fake_odom")),
+        parameters=[
+            {
+                "cmd_vel_topic": LaunchConfiguration("baseCmdTopic"),
+                "odom_topic": LaunchConfiguration("odomTopic"),
+                "frame_id": LaunchConfiguration("globalFrame"),
+                "child_frame_id": "base_footprint",
+                "publish_rate": ParameterValue(LaunchConfiguration("mrtFreq"), value_type=float),
+                "cmd_vel_timeout": ParameterValue(LaunchConfiguration("baseCmdTimeout"), value_type=float),
+                "warn_on_timeout": ParameterValue(LaunchConfiguration("warnOnBaseCmdTimeout"), value_type=bool),
+                "x0": LaunchConfiguration("baseX0"),
+                "y0": LaunchConfiguration("baseY0"),
+                "yaw0": LaunchConfiguration("baseYaw0"),
+            }
+        ],
+    )
+
+    world_tf_node = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        name="world_to_global_frame",
+        output="screen",
+        condition=IfCondition(LaunchConfiguration("use_fake_odom")),
+        arguments=[
+            "0", "0", "0", "0", "0", "0",
+            "world", LaunchConfiguration("globalFrame"),
+        ],
+    )
+
+    # Command interface launcher (marker / twist / trajectory)
+    command_type = LaunchConfiguration("commandType")
+    command_dir = PathJoinSubstitution([FindPackageShare("mpc_controller"), "launch", "command"])
+    command_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([
+                command_dir,
+                PythonExpression(["'", command_type, "'", " + '.launch.py'"]),
+            ])
+        ),
+        launch_arguments={
+            "taskFile": LaunchConfiguration("taskFile"),
+            "libFolder": LaunchConfiguration("libFolder"),
+            "urdfFile": LaunchConfiguration("urdfFile"),
+            "globalFrame": LaunchConfiguration("globalFrame"),
+        }.items(),
+    )
+
+    visualize_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([mpc_share, "launch", "visualization", "visualize.launch.py"])
+        ),
+        launch_arguments={
+            "urdfFile": LaunchConfiguration("urdfFile"),
+            "rviz": LaunchConfiguration("rviz"),
+            "rvizconfig": LaunchConfiguration("rvizconfig"),
+        }.items(),
+    )
+
+    return LaunchDescription(
+        declared_arguments
+        + [
+            world_tf_node,
+            visualize_launch,
+            fake_odom_node,
+            mpc_node,
+            ros2_control_node,
+            controller_sequence,
+            command_launch,
+        ]
+    )
