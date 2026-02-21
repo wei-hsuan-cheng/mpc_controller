@@ -405,6 +405,7 @@ Visualization Manager:
       Namespaces:
         Base Trajectory: true
         EE Trajectory: true
+        EE1 Trajectory: true
       Topic:
         Depth: 5
         Durability Policy: Volatile

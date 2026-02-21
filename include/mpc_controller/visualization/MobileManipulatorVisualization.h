@@ -61,9 +61,12 @@ private:
   const ocs2::mobile_manipulator_mpc::ManipulatorModelInfo model_info_;
   std::vector<std::string> remove_joint_names_;
 
+  bool dual_arm_mode_{false};
+
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr optimized_state_markers_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr optimized_pose_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr target_pose_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr target_pose_right_pub_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   std::string global_frame_;
 
