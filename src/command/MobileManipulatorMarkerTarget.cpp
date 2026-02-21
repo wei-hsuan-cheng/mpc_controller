@@ -117,7 +117,13 @@ bool readDualArmModeFromTaskFile(const std::string& taskFile) {
     bool dualArmMode = false;
     loadData::loadPtreeValue(pt, dualArmMode, "endEffector.dualArmMode", false);
     if (!dualArmMode) {
+      loadData::loadPtreeValue(pt, dualArmMode, "endEffectorTracking.dualArmMode", false);
+    }
+    if (!dualArmMode) {
       loadData::loadPtreeValue(pt, dualArmMode, "finalEndEffector.dualArmMode", false);
+    }
+    if (!dualArmMode) {
+      loadData::loadPtreeValue(pt, dualArmMode, "finalEndEffectorTracking.dualArmMode", false);
     }
 
     return dualArmMode;
