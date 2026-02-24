@@ -58,6 +58,17 @@ ros2 launch mpc_controller ridgeback_ur5.launch.py \
 # commandType:=marker, twist, trajectory
 ```
 
+[`pr2`](./launch/pr2.launch.py)
+```bash
+# PR2 mobile manipulator
+ros2 launch mpc_controller pr2.launch.py \
+  solver:=ddp \
+  commandType:=marker \
+  use_fake_hardware:=true
+# sovler:=ddp, sqp
+# commandType:=marker, twist, trajectory
+```
+
 If you built [`ocs2_ros2`](https://github.com/wei-hsuan-cheng/ocs2_ros2) in another workspace, source it **before** running the commands above (so their messages and plugins are discoverable).
 
 ## Folder layout
