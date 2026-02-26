@@ -45,6 +45,31 @@ def generate_launch_description():
             default_value="",
             description="Frame used for the interactive marker.",
         ),
+        DeclareLaunchArgument(
+            "deltaPoseTopic",
+            default_value=str(marker_defaults.get("delta_pose", {}).get("topic", "")),
+            description="Reactive delta pose topic. Empty string disables it.",
+        ),
+        DeclareLaunchArgument(
+            "deltaPoseInToolFrame",
+            default_value=_bool_to_str(marker_defaults.get("delta_pose", {}).get("in_tool_frame", True)),
+            description="Interpret delta pose in tool frame when true.",
+        ),
+        DeclareLaunchArgument(
+            "deltaPoseTimeout",
+            default_value=str(marker_defaults.get("delta_pose", {}).get("timeout", 0.0)),
+            description="Delta pose timeout in seconds (0.0 means never timeout).",
+        ),
+        DeclareLaunchArgument(
+            "nominalCommandFrameId",
+            default_value=str(marker_defaults.get("nominal_command_frame_id", "command_nominal")),
+            description="Nominal command TF child frame id.",
+        ),
+        DeclareLaunchArgument(
+            "modifiedCommandFrameId",
+            default_value=str(marker_defaults.get("modified_command_frame_id", "command")),
+            description="Modified command TF child frame id.",
+        ),
     ]
 
     task_file = LaunchConfiguration("taskFile")
@@ -64,6 +89,11 @@ def generate_launch_description():
             "enableJoystick": LaunchConfiguration("enableJoystick"),
             "enableAutoPosition": LaunchConfiguration("enableAutoPosition"),
             "markerGlobalFrame": global_frame,
+            "deltaPoseTopic": LaunchConfiguration("deltaPoseTopic"),
+            "deltaPoseInToolFrame": LaunchConfiguration("deltaPoseInToolFrame"),
+            "deltaPoseTimeout": LaunchConfiguration("deltaPoseTimeout"),
+            "nominalCommandFrameId": LaunchConfiguration("nominalCommandFrameId"),
+            "modifiedCommandFrameId": LaunchConfiguration("modifiedCommandFrameId"),
         }],
         output="screen",
     )

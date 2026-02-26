@@ -9,6 +9,15 @@ command:
     publish_rate: 50.0
     enable_joystick: false
     enable_auto_position: false
+    nominal_command_frame_id: "command_nominal"
+    modified_command_frame_id: "command"
+    #################### Reactive delta pose ####################
+    # Subscribe a reactive delta pose (PoseStamped) and apply it to the nominal marker command pose for TF publishing.
+    # Leave topic empty ("") to disable.
+    delta_pose:
+      topic: "/admittance_controller/delta_pose_cmd"
+      in_tool_frame: true
+      timeout: 0.0 # [sec] 0.0 -> never timeout (use last received delta forever)
   
   twist:
     publish_rate: 50.0

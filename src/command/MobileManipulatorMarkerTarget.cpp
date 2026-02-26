@@ -28,8 +28,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ******************************************************************************/
 
 #include <chrono>
+#include <mutex>
 #include <utility>
 
+#include <Eigen/Geometry>
 #include <ocs2_ros_interfaces/command/UnifiedTargetTrajectoriesInteractiveMarker.h>
 #include <ocs2_ros_interfaces/command/JoystickMarkerWrapper.h>
 #include <ocs2_ros_interfaces/command/MarkerAutoPositionWrapper.h>
@@ -46,6 +48,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <yaml-cpp/yaml.h>
 
 #include <tf2_ros/transform_broadcaster.h>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 
 using namespace ocs2;
@@ -185,16 +188,16 @@ int main(int argc, char* argv[]) {
       robotName + "_target",
       rclcpp::NodeOptions().allow_undeclared_parameters(true).automatically_declare_parameters_from_overrides(true));
 
-  // TF broadcaster for "command"
+  // TF broadcaster for command targets (nominal + modified).
   auto tf_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(node);
 
-  auto publishCommandTf = [&](const std::string& parent_frame, const Eigen::Vector3d& p,
-                              const Eigen::Quaterniond& q_in) {
+  auto publishTf = [&](const std::string& parent_frame, const std::string& child_frame, const Eigen::Vector3d& p,
+                       const Eigen::Quaterniond& q_in) {
     Eigen::Quaterniond q = q_in.normalized();
     geometry_msgs::msg::TransformStamped tf;
     tf.header.stamp = node->now();
     tf.header.frame_id = parent_frame;
-    tf.child_frame_id = "command";
+    tf.child_frame_id = child_frame;
     tf.transform.translation.x = p.x();
     tf.transform.translation.y = p.y();
     tf.transform.translation.z = p.z();
@@ -216,6 +219,122 @@ int main(int argc, char* argv[]) {
 
   double markerPublishRate = 10.0;
   try { markerPublishRate = node->get_parameter("markerPublishRate").as_double(); } catch (...) {}
+
+  std::string nominalCommandFrameId = "command_nominal";
+  try { nominalCommandFrameId = node->get_parameter("nominalCommandFrameId").as_string(); } catch (...) {}
+
+  std::string modifiedCommandFrameId = "command";
+  try { modifiedCommandFrameId = node->get_parameter("modifiedCommandFrameId").as_string(); } catch (...) {}
+
+  std::string deltaPoseTopic = "";
+  try { deltaPoseTopic = node->get_parameter("deltaPoseTopic").as_string(); } catch (...) {}
+
+  bool deltaPoseInToolFrame = true;
+  try { deltaPoseInToolFrame = node->get_parameter("deltaPoseInToolFrame").as_bool(); } catch (...) {}
+
+  double deltaPoseTimeoutSec = 0.0;
+  try { deltaPoseTimeoutSec = node->get_parameter("deltaPoseTimeout").as_double(); } catch (...) {}
+
+  Eigen::Vector3d deltaP = Eigen::Vector3d::Zero();
+  Eigen::Quaterniond deltaQ = Eigen::Quaterniond::Identity();
+  rclcpp::Time deltaPoseStamp(0, 0, node->get_clock()->get_clock_type());
+  bool haveDeltaPose = false;
+  std::mutex deltaPoseMtx;
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr deltaPoseSub;
+
+  if (!deltaPoseTopic.empty()) {
+    deltaPoseSub = node->create_subscription<geometry_msgs::msg::PoseStamped>(
+        deltaPoseTopic, rclcpp::QoS(1).best_effort(),
+        [&](const geometry_msgs::msg::PoseStamped::ConstSharedPtr msg) {
+          const Eigen::Vector3d dp(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z);
+          const Eigen::Quaterniond dq(msg->pose.orientation.w, msg->pose.orientation.x, msg->pose.orientation.y,
+                                      msg->pose.orientation.z);
+          const Eigen::Quaterniond dqNorm = (dq.norm() < 1e-12) ? Eigen::Quaterniond::Identity() : dq.normalized();
+
+          rclcpp::Time stamp(msg->header.stamp);
+          if (stamp.nanoseconds() == 0) {
+            stamp = node->now();
+          }
+
+          std::lock_guard<std::mutex> lock(deltaPoseMtx);
+          deltaP = dp;
+          deltaQ = dqNorm;
+          deltaPoseStamp = stamp;
+          haveDeltaPose = true;
+        });
+
+    RCLCPP_INFO(node->get_logger(),
+                "Delta pose subscriber enabled: topic=%s (in_tool_frame=%d timeout=%.3f sec)",
+                deltaPoseTopic.c_str(), static_cast<int>(deltaPoseInToolFrame), deltaPoseTimeoutSec);
+  }
+
+  auto getDeltaPose = [&](Eigen::Vector3d& dp, Eigen::Quaterniond& dq, const rclcpp::Time& now) {
+    std::lock_guard<std::mutex> lock(deltaPoseMtx);
+    if (!haveDeltaPose) {
+      return false;
+    }
+    if (deltaPoseTimeoutSec > 0.0) {
+      const double age = (now - deltaPoseStamp).seconds();
+      if (age > deltaPoseTimeoutSec) {
+        return false;
+      }
+    }
+    dp = deltaP;
+    dq = deltaQ;
+    return true;
+  };
+
+  auto applyDeltaPose = [&](Eigen::Vector3d& p, Eigen::Quaterniond& q) {
+    Eigen::Vector3d dp;
+    Eigen::Quaterniond dq;
+    if (!getDeltaPose(dp, dq, node->now())) {
+      return false;
+    }
+
+    const Eigen::Quaterniond q_nom = q.normalized();
+    if (deltaPoseInToolFrame) {
+      p = p + q_nom.toRotationMatrix() * dp;
+      q = (q_nom * dq).normalized();
+    } else {
+      p = p + dp;
+      q = (dq * q_nom).normalized();
+    }
+    return true;
+  };
+
+  auto singleArmGoalPoseToTargetTrajectoriesWithDelta =
+      [&](const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation, const SystemObservation& observation) {
+        Eigen::Vector3d p = position;
+        Eigen::Quaterniond q = orientation;
+        applyDeltaPose(p, q);
+        return goalPoseToTargetTrajectories(p, q, observation);
+      };
+
+  auto dualArmGoalPoseToTargetTrajectoriesWithDelta =
+      [&](const Eigen::Vector3d& leftPosition, const Eigen::Quaterniond& leftOrientation,
+          const Eigen::Vector3d& rightPosition, const Eigen::Quaterniond& rightOrientation,
+          const SystemObservation& observation) {
+        Eigen::Vector3d lp = leftPosition;
+        Eigen::Quaterniond lq = leftOrientation;
+        Eigen::Vector3d rp = rightPosition;
+        Eigen::Quaterniond rq = rightOrientation;
+        applyDeltaPose(lp, lq);
+        applyDeltaPose(rp, rq);
+        return dualArmGoalPoseToTargetTrajectories(lp, lq, rp, rq, observation);
+      };
+
+  auto publishNominalAndModifiedTf = [&](const std::string& parent_frame, const Eigen::Vector3d& p_nominal,
+                                         const Eigen::Quaterniond& q_nominal) {
+    publishTf(parent_frame, nominalCommandFrameId, p_nominal, q_nominal);
+
+    Eigen::Vector3d p_modified = p_nominal;
+    Eigen::Quaterniond q_modified = q_nominal;
+    applyDeltaPose(p_modified, q_modified);
+    publishTf(parent_frame, modifiedCommandFrameId, p_modified, q_modified);
+  };
+
+  RCLCPP_INFO(node->get_logger(), "Command TF frames: nominal=%s modified=%s",
+              nominalCommandFrameId.c_str(), modifiedCommandFrameId.c_str());
 
   bool dualArmMode = readDualArmModeFromTaskFile(taskFile);
 
@@ -279,7 +398,7 @@ int main(int argc, char* argv[]) {
 
     RCLCPP_INFO(node->get_logger(), "Dual arm mode enabled - creating dual arm interactive markers");
     UnifiedTargetTrajectoriesInteractiveMarker targetPoseCommand(
-        node, robotName, &dualArmGoalPoseToTargetTrajectories, markerPublishRate, markerGlobalFrame);
+        node, robotName, dualArmGoalPoseToTargetTrajectoriesWithDelta, markerPublishRate, markerGlobalFrame);
 
     auto obsSub = node->create_subscription<ocs2_msgs::msg::MpcObservation>(
         robotName + std::string("_mpc_observation"), 1,
@@ -360,8 +479,8 @@ int main(int argc, char* argv[]) {
               targetPoseCommand.updateMarkerDisplay("RightArmGoal", rp, rq);
               targetPoseCommand.sendDualArmTrajectories();
 
-              // Broadcast "command" TF (use LEFT arm as command)
-              publishCommandTf(markerGlobalFrame, lp, lq);
+              // Broadcast nominal/modified command TFs (use LEFT arm as command).
+              publishNominalAndModifiedTf(markerGlobalFrame, lp, lq);
 
               res->success = true;
               res->message = "MPC paused; holding current poses";
@@ -378,14 +497,14 @@ int main(int argc, char* argv[]) {
           }
         });
 
-    // Periodic "command" TF publishing so TF always matches current marker pose
+    // Periodic command TF publishing so TF always matches current marker pose.
     auto tf_timer = node->create_wall_timer(
         std::chrono::duration<double>(1.0 / std::max(1e-6, markerPublishRate)),
         [&]() {
           Eigen::Vector3d lp;
           Eigen::Quaterniond lq;
           std::tie(lp, lq) = targetPoseCommand.getDualArmPose(ocs2::IMarkerControl::ArmType::LEFT);
-          publishCommandTf(markerGlobalFrame, lp, lq);
+          publishNominalAndModifiedTf(markerGlobalFrame, lp, lq);
         });
 
     if (enableJoystick) {
@@ -412,7 +531,7 @@ int main(int argc, char* argv[]) {
 
   RCLCPP_INFO(node->get_logger(), "Single arm mode enabled");
   UnifiedTargetTrajectoriesInteractiveMarker targetPoseCommand(
-      node, robotName, &goalPoseToTargetTrajectories, markerPublishRate, markerGlobalFrame);
+      node, robotName, singleArmGoalPoseToTargetTrajectoriesWithDelta, markerPublishRate, markerGlobalFrame);
 
   auto obsSub = node->create_subscription<ocs2_msgs::msg::MpcObservation>(
       robotName + std::string("_mpc_observation"), 1,
@@ -476,8 +595,8 @@ int main(int argc, char* argv[]) {
             targetPoseCommand.updateMarkerDisplay("Goal", p, q);
             targetPoseCommand.sendSingleArmTrajectories();
 
-            // Broadcast "command" TF
-            publishCommandTf(markerGlobalFrame, p, q);
+            // Broadcast nominal/modified command TFs.
+            publishNominalAndModifiedTf(markerGlobalFrame, p, q);
 
             res->success = true;
             res->message = "MPC paused; holding current pose";
@@ -494,14 +613,14 @@ int main(int argc, char* argv[]) {
         }
       });
 
-  // Periodic "command" TF publishing so TF always matches current marker pose
+  // Periodic command TF publishing so TF always matches current marker pose.
   auto tf_timer = node->create_wall_timer(
       std::chrono::duration<double>(1.0 / std::max(1e-6, markerPublishRate)),
       [&]() {
         Eigen::Vector3d p;
         Eigen::Quaterniond q;
         std::tie(p, q) = targetPoseCommand.getSingleArmPose();
-        publishCommandTf(markerGlobalFrame, p, q);
+        publishNominalAndModifiedTf(markerGlobalFrame, p, q);
       });
 
   if (enableJoystick) {
