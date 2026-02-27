@@ -11,8 +11,8 @@ model_information {
   ; base frame of the robot (from URDF)
   baseFrame                       "base_link"
   ; end-effector frame of the robot (from URDF)
-  eeFrame                         "ur_arm_tool0" // ur_arm_tool0; ur_arm_flange
-  eeFrame1    "ur_arm_tool0"   ; optional but safe (for dual-arm code path)
+  eeFrame                       "ur_arm_tool0" // ur_arm_tool0; ur_arm_flange; base_link
+  eeFrame1                      "ur_arm_tool0" // optional but safe (for dual-arm code path)
 }
 
 model_settings
