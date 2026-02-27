@@ -385,12 +385,12 @@ jointVelocityLimits
     ; velocity limits for the arm DOFs
     arm
     {
-      (0,0)  -3.14159  ; ur_arm_shoulder_pan_joint velocity
-      (1,0)  -3.14159  ; ur_arm_shoulder_lift_joint velocity
-      (2,0)  -3.14159  ; ur_arm_elbow_joint velocity
-      (3,0)  -3.14159  ; ur_arm_wrist_1_joint velocity
-      (4,0)  -3.14159  ; ur_arm_wrist_2_joint velocity
-      (5,0)  -3.14159  ; ur_arm_wrist_3_joint velocity
+      (0,0)  -1.5708  ; ur_arm_shoulder_pan_joint velocity
+      (1,0)  -1.5708  ; ur_arm_shoulder_lift_joint velocity
+      (2,0)  -1.5708  ; ur_arm_elbow_joint velocity
+      (3,0)  -1.5708  ; ur_arm_wrist_1_joint velocity
+      (4,0)  -1.5708  ; ur_arm_wrist_2_joint velocity
+      (5,0)  -1.5708  ; ur_arm_wrist_3_joint velocity
     }
   }
 
@@ -427,12 +427,12 @@ jointVelocityLimits
     ; velocity limits for the arm DOFs
     arm
     {
-      (0,0)  3.14159  ; ur_arm_shoulder_pan_joint velocity
-      (1,0)  3.14159  ; ur_arm_shoulder_lift_joint velocity
-      (2,0)  3.14159  ; ur_arm_elbow_joint velocity
-      (3,0)  3.14159  ; ur_arm_wrist_1_joint velocity
-      (4,0)  3.14159  ; ur_arm_wrist_2_joint velocity
-      (5,0)  3.14159  ; ur_arm_wrist_3_joint velocity
+      (0,0)   1.5708  ; ur_arm_shoulder_pan_joint [rad/s]
+      (1,0)   1.5708  ; ur_arm_shoulder_lift_joint [rad/s]
+      (2,0)   1.5708  ; ur_arm_elbow_joint [rad/s]
+      (3,0)   1.5708  ; ur_arm_wrist_1_joint [rad/s]
+      (4,0)   1.5708  ; ur_arm_wrist_2_joint [rad/s]
+      (5,0)   1.5708  ; ur_arm_wrist_3_joint [rad/s]
     }
   }
 }
