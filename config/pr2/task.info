@@ -1,6 +1,7 @@
 ; robot model meta-information
 model_information {
   manipulatorModelType     1      // 0: Default-arm, 1: Wheel-based manipulator, 2: Floating-arm manipulator, 3: Fully actuated floating-arm manipulator
+  omnidirectionalBase      true   // false: unicycle (vx, omega), true: omnidirectional (vx, vy, omega)
   
   ; motion joints in the URDF to consider fixed
   removeJoints {
@@ -237,8 +238,9 @@ inputCost
       wheelBasedMobileManipulator
       {
         scaling 1e-2
-        (0,0)  1.5  ; forward velocity
-        (1,1)  1.5  ; turning velocity
+        (0,0)  1.5  ; linear velocity x
+        (1,1)  1.5  ; linear velocity y
+        (2,2)  1.5  ; yaw rate
       }
     }
     
@@ -460,8 +462,9 @@ jointVelocityLimits
 
       wheelBasedMobileManipulator
       {
-        (0,0)  -2.0 ; forward velocity
-        (1,0)  -2.0 ; turning velocity
+        (0,0)  -2.0 ; linear velocity x
+        (1,0)  -2.0 ; linear velocity y
+        (2,0)  -2.0 ; yaw rate
       }
     }
 
@@ -513,8 +516,9 @@ jointVelocityLimits
 
       wheelBasedMobileManipulator
       {
-        (0,0)  2.0 ; forward velocity
-        (1,0)  2.0 ; turning velocity
+        (0,0)  2.0 ; linear velocity x
+        (1,0)  2.0 ; linear velocity y
+        (2,0)  2.0 ; yaw rate
       }
     }
 

@@ -196,7 +196,7 @@ private:
   size_t arm_input_offset_{2};
 
   // Alpha LPF state
-  vector_t last_base_cmd_{vector_t::Zero(0)};  // wheel-based: size=2, else empty
+  vector_t last_base_cmd_{vector_t::Zero(0)};  // wheel-based: size=2 (unicycle) or 3 (omni), else empty
   std::vector<double> last_arm_pos_cmd_;
 
   // Loop state

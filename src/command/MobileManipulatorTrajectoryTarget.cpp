@@ -8,8 +8,8 @@
  *
  * In addition to the end-effector target, this node also publishes an
  * independent base target on "<robot>_base_mpc_target" using the same time
- * horizon and a planar figure-eight. For wheel-based manipulators the base
- * state target is [x, y, yaw].
+ * horizon and a sinusoidal back-and-forth line segment. For wheel-based
+ * manipulators the base state target is [x, y, yaw].
  */
 
 #include <chrono>
@@ -55,6 +55,8 @@ struct Params {
   double frequency_hz = 0.1;
   double base_amplitude = 0.2;
   double base_frequency_hz = 0.1;
+  double base_yaw = 0.0;
+  double base_slope = 0.0;
 };
 
 inline void orthonormalBasisFromAxis(const Eigen::Vector3d& axis_unit, Eigen::Vector3d& u, Eigen::Vector3d& v) {
@@ -94,35 +96,36 @@ inline void eightShapeTrajectory(const Eigen::Vector3d& center_p, const Eigen::Q
   }
 }
 
-inline void eightShapeBaseTrajectory(const Eigen::Vector3d& center_p, double yaw0, size_t base_pose_dim,
-                                     double start_time, double t0, int N, double dt, double amp, double freq_hz,
-                                     scalar_array_t& timeTraj, vector_array_t& stateTraj) {
+inline void sinusoidalLineBaseTrajectory(const Eigen::Vector3d& center_p, double yaw, double slope,
+                                       size_t base_pose_dim, double start_time, double t0, int N, double dt,
+                                       double amp, double freq_hz, scalar_array_t& timeTraj,
+                                       vector_array_t& stateTraj) {
   if (base_pose_dim != 3 && base_pose_dim != 6) {
     return;
   }
 
   const double omega = 2.0 * M_PI * freq_hz;
+  Eigen::Vector2d direction(1.0, slope);
+  if (direction.norm() < 1e-9) {
+    direction = Eigen::Vector2d::UnitX();
+  }
+  direction.normalize();
+
   timeTraj.reserve(N + 1);
   stateTraj.reserve(N + 1);
 
   for (int k = 0; k <= N; ++k) {
     const double tk = t0 + k * dt;
     const double tau = tk - start_time;
-    const double dx = amp * std::sin(omega * tau);
-    const double dy = 0.5 * amp * std::sin(2.0 * omega * tau);
-    const double vx = amp * omega * std::cos(omega * tau);
-    const double vy = amp * omega * std::cos(2.0 * omega * tau);
-
-    double yaw = yaw0;
-    if (std::hypot(vx, vy) > 1e-9) {
-      yaw = std::atan2(vy, vx);
-    }
+    const double displacement = amp * std::sin(omega * tau);
+    const double x = center_p.x() + displacement * direction.x();
+    const double y = center_p.y() + displacement * direction.y();
 
     vector_t target(base_pose_dim);
     if (base_pose_dim == 3) {
-      target << center_p.x() + dx, center_p.y() + dy, yaw;
+      target << x, y, yaw;
     } else {
-      target << center_p.x() + dx, center_p.y() + dy, center_p.z(), yaw, 0.0, 0.0;
+      target << x, y, center_p.z(), yaw, 0.0, 0.0;
     }
 
     timeTraj.push_back(tk);
@@ -147,6 +150,8 @@ class TrajectoryTargetNode : public rclcpp::Node {
     this->declare_parameter<double>("frequency", params_.frequency_hz);
     this->declare_parameter<double>("baseAmplitude", params_.base_amplitude);
     this->declare_parameter<double>("baseFrequency", params_.base_frequency_hz);
+    this->declare_parameter<double>("baseYaw", params_.base_yaw);
+    this->declare_parameter<double>("baseSlope", params_.base_slope);
     this->declare_parameter<double>("axisX", 0.0);
     this->declare_parameter<double>("axisY", 0.0);
     this->declare_parameter<double>("axisZ", 1.0);
@@ -164,6 +169,8 @@ class TrajectoryTargetNode : public rclcpp::Node {
     params_.frequency_hz = this->get_parameter("frequency").as_double();
     params_.base_amplitude = this->get_parameter("baseAmplitude").as_double();
     params_.base_frequency_hz = this->get_parameter("baseFrequency").as_double();
+    params_.base_yaw = this->get_parameter("baseYaw").as_double();
+    params_.base_slope = this->get_parameter("baseSlope").as_double();
     axis_.x() = this->get_parameter("axisX").as_double();
     axis_.y() = this->get_parameter("axisY").as_double();
     axis_.z() = this->get_parameter("axisZ").as_double();
@@ -233,7 +240,7 @@ class TrajectoryTargetNode : public rclcpp::Node {
         baseInputDim_ = info.inputDim >= info.armDim ? (info.inputDim - info.armDim) : 0;
       } else if (obs.state.size() >= 3) {
         basePoseDim_ = 3;
-        baseInputDim_ = obs.input.size() >= 2 ? 2 : 0;
+        baseInputDim_ = obs.input.size() >= 3 ? 3 : (obs.input.size() >= 2 ? 2 : 0);
       }
 
       if (basePoseDim_ >= 3 && obs.state.size() >= static_cast<Eigen::Index>(basePoseDim_)) {
@@ -241,10 +248,8 @@ class TrajectoryTargetNode : public rclcpp::Node {
         base_center_p_.y() = obs.state(1);
         if (basePoseDim_ == 6) {
           base_center_p_.z() = obs.state(2);
-          base_yaw0_ = obs.state(3);
         } else {
           base_center_p_.z() = 0.0;
-          base_yaw0_ = obs.state(2);
         }
       }
 
@@ -287,8 +292,9 @@ class TrajectoryTargetNode : public rclcpp::Node {
     if (baseTargetPub_ && basePoseDim_ > 0) {
       scalar_array_t baseTimeTraj;
       vector_array_t baseStateTraj;
-      eightShapeBaseTrajectory(base_center_p_, base_yaw0_, basePoseDim_, start_time_, obs.time, N, params_.dt,
-                               params_.base_amplitude, params_.base_frequency_hz, baseTimeTraj, baseStateTraj);
+      sinusoidalLineBaseTrajectory(base_center_p_, params_.base_yaw, params_.base_slope, basePoseDim_,
+                                 start_time_, obs.time, N, params_.dt, params_.base_amplitude,
+                                 params_.base_frequency_hz, baseTimeTraj, baseStateTraj);
 
       vector_array_t baseInputTraj;
       baseInputTraj.resize(baseTimeTraj.size(), vector_t::Zero(static_cast<Eigen::Index>(baseInputDim_)));
@@ -379,7 +385,6 @@ class TrajectoryTargetNode : public rclcpp::Node {
   size_t basePoseDim_{0};
   size_t baseInputDim_{0};
   Eigen::Vector3d base_center_p_ = Eigen::Vector3d::Zero();
-  double base_yaw0_{0.0};
 };
 
 int main(int argc, char** argv) {

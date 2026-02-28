@@ -136,7 +136,7 @@ OCS2Controller::ArmCommandMode OCS2Controller::parseArmCommandMode(const std::st
 // ===== Model layout =====
 void OCS2Controller::resolveModelLayout()
 {
-  // Default: wheel-based (type 1)
+  // Default: wheel-based (type 1), unicycle layout until interface data is available.
   model_type_ = ManipulatorModelType::WheelBasedMobileManipulator;
   base_state_dim_ = 3;
   base_input_dim_ = 2;
@@ -158,11 +158,11 @@ void OCS2Controller::resolveModelLayout()
       break;
 
     case ManipulatorModelType::WheelBasedMobileManipulator:
-      // state=[x y yaw q_arm], input=[v w dq_arm]
+      // state=[x y yaw q_arm], input=[vx omega dq_arm] or [vx vy omega dq_arm]
       base_state_dim_ = 3;
-      base_input_dim_ = 2;
+      base_input_dim_ = info.inputDim - info.armDim;
       arm_state_offset_ = 3;
-      arm_input_offset_ = 2;
+      arm_input_offset_ = base_input_dim_;
       break;
 
     case ManipulatorModelType::FloatingArmManipulator:
@@ -690,10 +690,11 @@ controller_interface::return_type OCS2Controller::runSynchronizedLoopStep()
 
 void OCS2Controller::applyHoldCommand(const SystemObservation & observation)
 {
-  // base hold: only for wheel-based model (Twist v,w)
+  // base hold: only for wheel-based model (Twist vx,[vy],omega)
   if (model_type_ == ManipulatorModelType::WheelBasedMobileManipulator && base_cmd_pub_) {
     geometry_msgs::msg::Twist cmd;
     cmd.linear.x = 0.0;
+    cmd.linear.y = 0.0;
     cmd.angular.z = 0.0;
     base_cmd_pub_->publish(cmd);
   }
@@ -719,14 +720,17 @@ void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const v
   const double a = command_smoothing_alpha_;
 
   // base LPF (vel) only for wheel-based
-  if (model_type_ == ManipulatorModelType::WheelBasedMobileManipulator) {
-    vector_t u_base = vector_t::Zero(2);
-    if (u_end.size() >= 2) {
-      u_base(0) = u_end(0);
-      u_base(1) = u_end(1);
+  if (model_type_ == ManipulatorModelType::WheelBasedMobileManipulator && base_input_dim_ >= 2) {
+    vector_t u_base = vector_t::Zero(static_cast<Eigen::Index>(base_input_dim_));
+    if (u_end.size() >= u_base.size()) {
+      u_base = u_end.head(u_base.size());
+    } else if (u_end.size() > 0) {
+      u_base.head(u_end.size()) = u_end.head(u_end.size());
     }
 
-    if (last_base_cmd_.size() != 2) last_base_cmd_ = vector_t::Zero(2);
+    if (last_base_cmd_.size() != u_base.size()) {
+      last_base_cmd_ = vector_t::Zero(u_base.size());
+    }
 
     const vector_t blended_base = a * u_base + (1.0 - a) * last_base_cmd_;
     last_base_cmd_ = blended_base;
@@ -734,7 +738,10 @@ void OCS2Controller::applyFilteredRolloutCommand(const vector_t & u_end, const v
     if (base_cmd_pub_) {
       geometry_msgs::msg::Twist cmd;
       cmd.linear.x = blended_base(0);
-      cmd.angular.z = blended_base(1);
+      if (base_input_dim_ >= 3) {
+        cmd.linear.y = blended_base(1);
+      }
+      cmd.angular.z = blended_base(base_input_dim_ - 1);
       base_cmd_pub_->publish(cmd);
     }
   }

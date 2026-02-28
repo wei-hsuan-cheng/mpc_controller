@@ -44,5 +44,7 @@ command:
       y: 0.0
       z: 1.0
     base_trajectory:
-      amplitude: 0.05
-      frequency: 0.02
+      amplitude: 0.2
+      frequency: 0.05
+      yaw: 0.0
+      slope: 1.0

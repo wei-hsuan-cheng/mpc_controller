@@ -100,11 +100,12 @@ private:
       }
     }
 
-    const double v = cmd.linear.x;
+    const double vx = cmd.linear.x;
+    const double vy = cmd.linear.y;
     const double omega = cmd.angular.z;
 
-    x_ += v * std::cos(yaw_) * dt;
-    y_ += v * std::sin(yaw_) * dt;
+    x_ += (vx * std::cos(yaw_) - vy * std::sin(yaw_)) * dt;
+    y_ += (vx * std::sin(yaw_) + vy * std::cos(yaw_)) * dt;
     yaw_ = normalizeYaw(yaw_ + omega * dt);
 
     geometry_msgs::msg::TransformStamped tf;
