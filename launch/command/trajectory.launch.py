@@ -17,6 +17,7 @@ def generate_launch_description():
     params = load_common_params()
     trajectory_defaults = params.get("command", {}).get("trajectory", {})
     axis_defaults = trajectory_defaults.get("axis", {})
+    base_trajectory_defaults = trajectory_defaults.get("base_trajectory", {})
     default_global_frame = load_default_frame_from_robot_config()
 
     declared_arguments = [
@@ -29,6 +30,8 @@ def generate_launch_description():
         DeclareLaunchArgument("trajectoryDt", default_value=str(trajectory_defaults.get("hodtrizon", 0.01)), description="Trajectory discretization step (s)."),
         DeclareLaunchArgument("trajectoryAmplitude", default_value=str(trajectory_defaults.get("amplitude", 0.2)), description="Eight-shape amplitude (m)."),
         DeclareLaunchArgument("trajectoryFrequency", default_value=str(trajectory_defaults.get("frequency", 0.2)), description="Eight-shape frequency (Hz)."),
+        DeclareLaunchArgument("baseTrajectoryAmplitude", default_value=str(base_trajectory_defaults.get("amplitude", trajectory_defaults.get("amplitude", 0.2))), description="Base eight-shape amplitude (m)."),
+        DeclareLaunchArgument("baseTrajectoryFrequency", default_value=str(base_trajectory_defaults.get("frequency", trajectory_defaults.get("frequency", 0.2))), description="Base eight-shape frequency (Hz)."),
         DeclareLaunchArgument("trajectoryAxisX", default_value=str(axis_defaults.get("x", 1.0))),
         DeclareLaunchArgument("trajectoryAxisY", default_value=str(axis_defaults.get("y", 0.0))),
         DeclareLaunchArgument("trajectoryAxisZ", default_value=str(axis_defaults.get("z", 1.0))),
@@ -56,6 +59,8 @@ def generate_launch_description():
             "dt": LaunchConfiguration("trajectoryDt"),
             "amplitude": LaunchConfiguration("trajectoryAmplitude"),
             "frequency": LaunchConfiguration("trajectoryFrequency"),
+            "baseAmplitude": LaunchConfiguration("baseTrajectoryAmplitude"),
+            "baseFrequency": LaunchConfiguration("baseTrajectoryFrequency"),
             "axisX": LaunchConfiguration("trajectoryAxisX"),
             "axisY": LaunchConfiguration("trajectoryAxisY"),
             "axisZ": LaunchConfiguration("trajectoryAxisZ"),

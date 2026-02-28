@@ -5,6 +5,11 @@
  * in XY, centered at the initial end-effector position. Orientation remains
  * constant (initial FK orientation). Uses the latest MPC observation time as
  * anchor and advances the phase relative to the first observation time.
+ *
+ * In addition to the end-effector target, this node also publishes an
+ * independent base target on "<robot>_base_mpc_target" using the same time
+ * horizon and a planar figure-eight. For wheel-based manipulators the base
+ * state target is [x, y, yaw].
  */
 
 #include <chrono>
@@ -48,6 +53,8 @@ struct Params {
   double dt = 0.05;
   double amplitude = 0.2;
   double frequency_hz = 0.1;
+  double base_amplitude = 0.2;
+  double base_frequency_hz = 0.1;
 };
 
 inline void orthonormalBasisFromAxis(const Eigen::Vector3d& axis_unit, Eigen::Vector3d& u, Eigen::Vector3d& v) {
@@ -86,6 +93,42 @@ inline void eightShapeTrajectory(const Eigen::Vector3d& center_p, const Eigen::Q
     stateTraj.push_back(std::move(target));
   }
 }
+
+inline void eightShapeBaseTrajectory(const Eigen::Vector3d& center_p, double yaw0, size_t base_pose_dim,
+                                     double start_time, double t0, int N, double dt, double amp, double freq_hz,
+                                     scalar_array_t& timeTraj, vector_array_t& stateTraj) {
+  if (base_pose_dim != 3 && base_pose_dim != 6) {
+    return;
+  }
+
+  const double omega = 2.0 * M_PI * freq_hz;
+  timeTraj.reserve(N + 1);
+  stateTraj.reserve(N + 1);
+
+  for (int k = 0; k <= N; ++k) {
+    const double tk = t0 + k * dt;
+    const double tau = tk - start_time;
+    const double dx = amp * std::sin(omega * tau);
+    const double dy = 0.5 * amp * std::sin(2.0 * omega * tau);
+    const double vx = amp * omega * std::cos(omega * tau);
+    const double vy = amp * omega * std::cos(2.0 * omega * tau);
+
+    double yaw = yaw0;
+    if (std::hypot(vx, vy) > 1e-9) {
+      yaw = std::atan2(vy, vx);
+    }
+
+    vector_t target(base_pose_dim);
+    if (base_pose_dim == 3) {
+      target << center_p.x() + dx, center_p.y() + dy, yaw;
+    } else {
+      target << center_p.x() + dx, center_p.y() + dy, center_p.z(), yaw, 0.0, 0.0;
+    }
+
+    timeTraj.push_back(tk);
+    stateTraj.push_back(std::move(target));
+  }
+}
 }  // namespace
 
 class TrajectoryTargetNode : public rclcpp::Node {
@@ -102,6 +145,8 @@ class TrajectoryTargetNode : public rclcpp::Node {
     this->declare_parameter<double>("dt", params_.dt);
     this->declare_parameter<double>("amplitude", params_.amplitude);
     this->declare_parameter<double>("frequency", params_.frequency_hz);
+    this->declare_parameter<double>("baseAmplitude", params_.base_amplitude);
+    this->declare_parameter<double>("baseFrequency", params_.base_frequency_hz);
     this->declare_parameter<double>("axisX", 0.0);
     this->declare_parameter<double>("axisY", 0.0);
     this->declare_parameter<double>("axisZ", 1.0);
@@ -117,6 +162,8 @@ class TrajectoryTargetNode : public rclcpp::Node {
     params_.dt = this->get_parameter("dt").as_double();
     params_.amplitude = this->get_parameter("amplitude").as_double();
     params_.frequency_hz = this->get_parameter("frequency").as_double();
+    params_.base_amplitude = this->get_parameter("baseAmplitude").as_double();
+    params_.base_frequency_hz = this->get_parameter("baseFrequency").as_double();
     axis_.x() = this->get_parameter("axisX").as_double();
     axis_.y() = this->get_parameter("axisY").as_double();
     axis_.z() = this->get_parameter("axisZ").as_double();
@@ -135,6 +182,8 @@ class TrajectoryTargetNode : public rclcpp::Node {
     }
 
     targetPub_ = this->create_publisher<ocs2_msgs::msg::MpcTargetTrajectories>(robotName_ + std::string("_mpc_target"), 1);
+    baseTargetPub_ =
+        this->create_publisher<ocs2_msgs::msg::MpcTargetTrajectories>(robotName_ + std::string("_base_mpc_target"), 1);
     targetMarkerPub_ =
         this->create_publisher<visualization_msgs::msg::MarkerArray>("/mobile_manipulator/targetStateTrajectory", 1);
     targetPosePub_ =
@@ -151,8 +200,9 @@ class TrajectoryTargetNode : public rclcpp::Node {
     const auto period = std::chrono::duration<double>(1.0 / std::max(1e-6, params_.publish_rate_hz));
     timer_ = this->create_wall_timer(period, std::bind(&TrajectoryTargetNode::onTimer, this));
 
-    RCLCPP_INFO(this->get_logger(), "Trajectory target node started. Publishing to %s_mpc_target at %.1f Hz",
-                robotName_.c_str(), params_.publish_rate_hz);
+    RCLCPP_INFO(this->get_logger(),
+                "Trajectory target node started. Publishing to %s_mpc_target and %s_base_mpc_target at %.1f Hz",
+                robotName_.c_str(), robotName_.c_str(), params_.publish_rate_hz);
   }
 
  private:
@@ -165,6 +215,39 @@ class TrajectoryTargetNode : public rclcpp::Node {
     }
 
     if (!initialized_) {
+      if (interface_) {
+        const auto& info = interface_->getManipulatorModelInfo();
+        switch (info.manipulatorModelType) {
+          case ManipulatorModelType::WheelBasedMobileManipulator:
+            basePoseDim_ = 3;
+            break;
+          case ManipulatorModelType::FloatingArmManipulator:
+          case ManipulatorModelType::FullyActuatedFloatingArmManipulator:
+            basePoseDim_ = 6;
+            break;
+          case ManipulatorModelType::DefaultManipulator:
+          default:
+            basePoseDim_ = 0;
+            break;
+        }
+        baseInputDim_ = info.inputDim >= info.armDim ? (info.inputDim - info.armDim) : 0;
+      } else if (obs.state.size() >= 3) {
+        basePoseDim_ = 3;
+        baseInputDim_ = obs.input.size() >= 2 ? 2 : 0;
+      }
+
+      if (basePoseDim_ >= 3 && obs.state.size() >= static_cast<Eigen::Index>(basePoseDim_)) {
+        base_center_p_.x() = obs.state(0);
+        base_center_p_.y() = obs.state(1);
+        if (basePoseDim_ == 6) {
+          base_center_p_.z() = obs.state(2);
+          base_yaw0_ = obs.state(3);
+        } else {
+          base_center_p_.z() = 0.0;
+          base_yaw0_ = obs.state(2);
+        }
+      }
+
       if (interface_) {
         try {
           const auto& pin = interface_->getPinocchioInterface();
@@ -200,6 +283,20 @@ class TrajectoryTargetNode : public rclcpp::Node {
     TargetTrajectories traj(std::move(timeTraj), std::move(stateTraj), std::move(inputTraj));
     const auto targetMsg = ros_msg_conversions::createTargetTrajectoriesMsg(traj);
     targetPub_->publish(targetMsg);
+
+    if (baseTargetPub_ && basePoseDim_ > 0) {
+      scalar_array_t baseTimeTraj;
+      vector_array_t baseStateTraj;
+      eightShapeBaseTrajectory(base_center_p_, base_yaw0_, basePoseDim_, start_time_, obs.time, N, params_.dt,
+                               params_.base_amplitude, params_.base_frequency_hz, baseTimeTraj, baseStateTraj);
+
+      vector_array_t baseInputTraj;
+      baseInputTraj.resize(baseTimeTraj.size(), vector_t::Zero(static_cast<Eigen::Index>(baseInputDim_)));
+
+      TargetTrajectories baseTraj(std::move(baseTimeTraj), std::move(baseStateTraj), std::move(baseInputTraj));
+      const auto baseTargetMsg = ros_msg_conversions::createTargetTrajectoriesMsg(baseTraj);
+      baseTargetPub_->publish(baseTargetMsg);
+    }
 
     // Broadcast "command" TF as the *current* command point (front)
     if (tfBroadcaster_ && !traj.stateTrajectory.empty()) {
@@ -263,6 +360,7 @@ class TrajectoryTargetNode : public rclcpp::Node {
   std::unique_ptr<MobileManipulatorInterface> interface_;
 
   rclcpp::Publisher<ocs2_msgs::msg::MpcTargetTrajectories>::SharedPtr targetPub_;
+  rclcpp::Publisher<ocs2_msgs::msg::MpcTargetTrajectories>::SharedPtr baseTargetPub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr targetMarkerPub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr targetPosePub_;
   rclcpp::Subscription<ocs2_msgs::msg::MpcObservation>::SharedPtr obsSub_;
@@ -278,6 +376,10 @@ class TrajectoryTargetNode : public rclcpp::Node {
   double start_time_{0.0};
   Eigen::Vector3d center_p_ = Eigen::Vector3d::Zero();
   Eigen::Quaterniond q0_ = Eigen::Quaterniond::Identity();
+  size_t basePoseDim_{0};
+  size_t baseInputDim_{0};
+  Eigen::Vector3d base_center_p_ = Eigen::Vector3d::Zero();
+  double base_yaw0_{0.0};
 };
 
 int main(int argc, char** argv) {

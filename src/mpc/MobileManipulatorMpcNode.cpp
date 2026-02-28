@@ -29,6 +29,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <ocs2_ddp/GaussNewtonDDP_MPC.h>
 #include <mobile_manipulator_mpc/MobileManipulatorInterface.h>
+#include <mobile_manipulator_mpc/reference/MobileManipulatorReferenceManager.h>
+#include <ocs2_msgs/msg/mpc_target_trajectories.hpp>
+#include <ocs2_ros_interfaces/common/RosMsgConversions.h>
 #include <ocs2_ros_interfaces/mpc/MPC_ROS_Interface.h>
 #include <ocs2_ros_interfaces/synchronized_module/RosReferenceManager.h>
 
@@ -59,6 +62,18 @@ int main(int argc, char **argv) {
       std::make_shared<RosReferenceManager>(robotName, interface.getReferenceManagerPtr());
   rosReferenceManagerPtr->subscribe(node);
 
+  auto mobileManipulatorReferenceManagerPtr =
+      std::dynamic_pointer_cast<MobileManipulatorReferenceManager>(interface.getReferenceManagerPtr());
+  rclcpp::Subscription<ocs2_msgs::msg::MpcTargetTrajectories>::SharedPtr baseTargetSubscriber;
+  if (mobileManipulatorReferenceManagerPtr) {
+    baseTargetSubscriber = node->create_subscription<ocs2_msgs::msg::MpcTargetTrajectories>(
+        robotName + std::string("_base_mpc_target"), 1,
+        [mobileManipulatorReferenceManagerPtr](const ocs2_msgs::msg::MpcTargetTrajectories& msg) {
+          auto targetTrajectories = ros_msg_conversions::readTargetTrajectoriesMsg(msg);
+          mobileManipulatorReferenceManagerPtr->setBaseTargetTrajectories(std::move(targetTrajectories));
+        });
+  }
+
   GaussNewtonDDP_MPC mpc(interface.mpcSettings(), interface.ddpSettings(), interface.getRollout(),
                          interface.getOptimalControlProblem(), interface.getInitializer());
   mpc.getSolverPtr()->setReferenceManager(rosReferenceManagerPtr);
@@ -66,5 +81,6 @@ int main(int argc, char **argv) {
   MPC_ROS_Interface mpcNode(mpc, robotName);
   mpcNode.launchNodes(node);
 
+  (void)baseTargetSubscriber;
   return 0;
 }
