@@ -34,11 +34,46 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <ocs2_ros_interfaces/common/RosMsgConversions.h>
 #include <ocs2_ros_interfaces/mpc/MPC_ROS_Interface.h>
 #include <ocs2_ros_interfaces/synchronized_module/RosReferenceManager.h>
+#include <visualization_msgs/msg/marker_array.hpp>
+
+#include <algorithm>
+#include <utility>
 
 #include "rclcpp/rclcpp.hpp"
 
 using namespace ocs2;
 using namespace ocs2::mobile_manipulator_mpc;
+
+namespace {
+
+EnvironmentObstacleArray readEnvironmentObstacles(const visualization_msgs::msg::MarkerArray& msg) {
+  EnvironmentObstacleArray obstacles;
+  obstacles.reserve(msg.markers.size());
+
+  for (const auto& marker : msg.markers) {
+    if (marker.type != visualization_msgs::msg::Marker::SPHERE ||
+        marker.action != visualization_msgs::msg::Marker::ADD) {
+      continue;
+    }
+
+    const double diameter = std::max({marker.scale.x, marker.scale.y, marker.scale.z});
+    if (diameter <= 0.0) {
+      continue;
+    }
+
+    SphericalObstacle obstacle;
+    obstacle.center.x() = marker.pose.position.x;
+    obstacle.center.y() = marker.pose.position.y;
+    obstacle.center.z() = marker.pose.position.z;
+    obstacle.radius = 0.5 * diameter;
+    obstacles.push_back(std::move(obstacle));
+  }
+
+  return obstacles;
+}
+
+}  // namespace
+
 int main(int argc, char** argv)
 {
     const std::string robotName = "mobile_manipulator";
@@ -66,12 +101,19 @@ int main(int argc, char** argv)
     auto mobileManipulatorReferenceManagerPtr =
         std::dynamic_pointer_cast<MobileManipulatorReferenceManager>(interface.getReferenceManagerPtr());
     rclcpp::Subscription<ocs2_msgs::msg::MpcTargetTrajectories>::SharedPtr baseTargetSubscriber;
+    rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr envObstacleSubscriber;
     if (mobileManipulatorReferenceManagerPtr) {
         baseTargetSubscriber = node->create_subscription<ocs2_msgs::msg::MpcTargetTrajectories>(
             robotName + std::string("_base_mpc_target"), 1,
             [mobileManipulatorReferenceManagerPtr](const ocs2_msgs::msg::MpcTargetTrajectories& msg) {
                 auto targetTrajectories = ros_msg_conversions::readTargetTrajectoriesMsg(msg);
                 mobileManipulatorReferenceManagerPtr->setBaseTargetTrajectories(std::move(targetTrajectories));
+            });
+        envObstacleSubscriber = node->create_subscription<visualization_msgs::msg::MarkerArray>(
+            robotName + std::string("_env_obstacles"), 1,
+            [mobileManipulatorReferenceManagerPtr](const visualization_msgs::msg::MarkerArray& msg) {
+                auto obstacles = readEnvironmentObstacles(msg);
+                mobileManipulatorReferenceManagerPtr->setEnvironmentObstacles(std::move(obstacles));
             });
     }
 
@@ -83,5 +125,6 @@ int main(int argc, char** argv)
     mpcNode.launchNodes(node);
 
     (void)baseTargetSubscriber;
+    (void)envObstacleSubscriber;
     return 0;
 }

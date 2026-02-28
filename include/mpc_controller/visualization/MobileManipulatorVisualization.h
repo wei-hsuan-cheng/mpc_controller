@@ -19,8 +19,11 @@
 #include <ocs2_core/reference/TargetTrajectories.h>
 #include <ocs2_mpc/CommandData.h>
 #include <mobile_manipulator_mpc/MobileManipulatorInterface.h>
+#include <mobile_manipulator_mpc/reference/MobileManipulatorReferenceManager.h>
 #include <ocs2_oc/oc_data/PrimalSolution.h>
 #include <ocs2_self_collision_visualization/GeometryInterfaceVisualization.h>
+
+#include "mpc_controller/visualization/EnvironmentCollisionVisualization.h"
 
 namespace mpc_controller {
 
@@ -60,6 +63,7 @@ private:
   ocs2::PinocchioInterface pinocchio_interface_;
   const ocs2::mobile_manipulator_mpc::ManipulatorModelInfo model_info_;
   std::vector<std::string> remove_joint_names_;
+  std::shared_ptr<ocs2::mobile_manipulator_mpc::MobileManipulatorReferenceManager> reference_manager_;
 
   bool dual_arm_mode_{false};
 
@@ -71,6 +75,7 @@ private:
   std::string global_frame_;
 
   std::unique_ptr<ocs2::GeometryInterfaceVisualization> geometry_visualization_;
+  std::unique_ptr<EnvironmentCollisionVisualization> env_collision_visualization_;
 };
 
 } // namespace mpc_controller

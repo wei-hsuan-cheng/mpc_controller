@@ -415,6 +415,34 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
+      Name: Environment Scene
+      Namespaces:
+        dynamic_obstacles: true
+        robot_spheres: true
+        static_obstacles: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /mobile_manipulator/environmentSceneMarkers
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Environment Distances
+      Namespaces:
+        env_distance_arrow: true
+        env_distance_endpoints: true
+        env_distance_text: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /mobile_manipulator/environmentDistanceMarkers
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
       Name: MarkerArray
       Namespaces:
         5 - 9: true

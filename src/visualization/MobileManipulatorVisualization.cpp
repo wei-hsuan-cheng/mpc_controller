@@ -16,6 +16,7 @@
 #include <ocs2_core/misc/LoadData.h>
 #include <ocs2_core/misc/LoadStdVectorOfPair.h>
 #include <mobile_manipulator_mpc/AccessHelperFunctions.h>
+#include <mobile_manipulator_mpc/EnvironmentCollisionConfig.h>
 #include <mobile_manipulator_mpc/FactoryFunctions.h>
 #include <ocs2_ros_interfaces/common/RosMsgHelpers.h>
 
@@ -77,6 +78,8 @@ MobileManipulatorVisualization::MobileManipulatorVisualization(const rclcpp::Nod
     : node_(node),
       pinocchio_interface_(interface.getPinocchioInterface()),
       model_info_(interface.getManipulatorModelInfo()),
+      reference_manager_(std::dynamic_pointer_cast<ocs2::mobile_manipulator_mpc::MobileManipulatorReferenceManager>(
+          interface.getReferenceManagerPtr())),
       tf_broadcaster_(std::make_unique<tf2_ros::TransformBroadcaster>(node)),
       global_frame_(global_frame) {
   launchVisualizerNode(task_file, urdf_file);
@@ -113,6 +116,13 @@ void MobileManipulatorVisualization::launchVisualizerNode(const std::string &tas
     ocs2::PinocchioGeometryInterface geom_interface(viz_pinocchio, collision_link_pairs, collision_object_pairs);
     geometry_visualization_ = std::make_unique<GeometryInterfaceVisualization>(
         std::move(viz_pinocchio), std::move(geom_interface), global_frame_);
+  }
+
+  const auto env_collision_config =
+      ocs2::mobile_manipulator_mpc::loadEnvironmentCollisionConfig(task_file, "envCollision", pinocchio_interface_.getModel());
+  if (env_collision_config.activate) {
+    env_collision_visualization_ = std::make_unique<EnvironmentCollisionVisualization>(
+        node_, pinocchio_interface_, reference_manager_, env_collision_config, global_frame_);
   }
 }
 
@@ -259,6 +269,9 @@ void MobileManipulatorVisualization::update(const ocs2::vector_t &current_state,
 
   if (geometry_visualization_) {
     geometry_visualization_->publishDistances(current_state);
+  }
+  if (env_collision_visualization_) {
+    env_collision_visualization_->publish(current_state, stamp);
   }
 }
 

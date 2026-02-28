@@ -30,6 +30,7 @@ add_library(${PROJECT_NAME}
   SHARED
   src/control/OCS2Controller.cpp
   src/visualization/MobileManipulatorVisualization.cpp
+  src/visualization/EnvironmentCollisionVisualization.cpp
 )
 
 target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_17)

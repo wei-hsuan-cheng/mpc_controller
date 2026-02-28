@@ -306,6 +306,43 @@ referenceBlending
   }
 }
 
+envCollision
+{
+  activate true
+  mu 0.01
+  delta 0.001
+  minimumDistance 0.05
+
+  ; Robot approximation spheres used for environment clearance checks.
+  ; These are not scene objects: they define which robot regions are tested against obstacles.
+  ; Each frame must exist in the Pinocchio model.
+  robotSpheres
+  {
+    [0]
+    {
+      frame "base_link"
+      radius 0.5
+    }
+    [1]
+    {
+      frame "ur_arm_tool0"
+      radius 0.01
+    }
+  }
+
+  ; Static obstacle spheres in the MPC/world frame.
+  staticObstacles
+  {
+    [0]
+    {
+      x 1.5
+      y 0.0
+      z 0.5
+      radius 0.5
+    }
+  }
+}
+
 selfCollision
 { 
   ; activate self-collision constraint
