@@ -271,6 +271,7 @@ referenceBlending
 envCollision
 {
   activate true
+  implementation soft // soft, augmented
   mu 0.01
   delta 0.001
   minimumDistance 0.05
@@ -304,6 +305,7 @@ selfCollision
 { 
   ; activate self-collision constraint
   activate  true // false; true
+  implementation soft // soft, augmented
 
   ; Self Collision raw object pairs
   collisionObjectPairs
@@ -335,6 +337,7 @@ jointPositionLimits
 {
   ; activate constraint
   activate  true
+  implementation soft // soft, augmented
 
   ; relaxed log barrier mu
   mu      0.01
@@ -345,6 +348,9 @@ jointPositionLimits
 
 jointVelocityLimits
 {
+  activate  true
+  implementation soft // soft, augmented
+
   ; relaxed log barrier mu
   mu      0.01
 
