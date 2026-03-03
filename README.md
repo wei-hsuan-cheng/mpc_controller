@@ -185,8 +185,21 @@ ros2 action send_goal \
     time_scaling: 'min_jerk', 
     screw_uhat: [0.0, 1.0, 0.0], 
     screw_r: [-0.2, 0.0, 0.0], 
-    screw_theta: 1.57079632679, 
+    screw_theta: 0.7854, 
     screw_in_tool_frame: true
+  }"
+
+ros2 action send_goal \
+  /mobile_manipulator/trajectory_tracking/execute_screw_move \
+  mpc_cartesian_planner/action/ExecuteScrewMove \
+  "{
+    duration: 5.0, 
+    dt: 0.02, 
+    time_scaling: 'min_jerk', 
+    screw_uhat: [0.0, 0.0, -1.0], 
+    screw_r: [-0.5, 0.25, 0.0], 
+    screw_theta: 0.7854, 
+    screw_in_tool_frame: false
   }"
 ```
 
