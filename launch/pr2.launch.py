@@ -69,6 +69,14 @@ def generate_launch_description():
         DeclareLaunchArgument("baseY0", default_value=base_y_default),
         DeclareLaunchArgument("baseYaw0", default_value=base_yaw_default),
         DeclareLaunchArgument("commandType", default_value="marker"),
+        # --- TT launch switches / args (cartesian planner) ---
+        DeclareLaunchArgument("robotName", default_value="mobile_manipulator"),
+        DeclareLaunchArgument("tt_params", default_value=os.path.join(
+            get_package_share_directory("mpc_cartesian_planner"), "config", "tt_params.yaml")),
+        DeclareLaunchArgument("publishZeroBaseCmdOnIntervention", default_value="true"),
+        DeclareLaunchArgument("zeroBaseCmdBurstCount", default_value="10"),
+        DeclareLaunchArgument("zeroBaseCmdBurstRate", default_value="50.0"),
+        DeclareLaunchArgument("activateMpcControllerOnGoal", default_value="false"),
     ]
 
     robot_description_content = Command(
@@ -185,6 +193,30 @@ def generate_launch_description():
         }.items(),
     )
 
+    # Trajectory tracking action + monitor launcher
+    tt_action_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            PathJoinSubstitution([
+                FindPackageShare("mpc_cartesian_planner"),
+                "launch",
+                "tt_action.launch.py",
+            ])
+        ),
+        launch_arguments={
+            "tt_params": LaunchConfiguration("tt_params"),
+            "robotName": LaunchConfiguration("robotName"),
+            "taskFile": LaunchConfiguration("taskFile"),
+            "libFolder": LaunchConfiguration("libFolder"),
+            "urdfFile": LaunchConfiguration("urdfFile"),
+            "globalFrame": LaunchConfiguration("globalFrame"),
+            "baseCmdTopic": LaunchConfiguration("baseCmdTopic"),
+            "publishZeroBaseCmdOnIntervention": LaunchConfiguration("publishZeroBaseCmdOnIntervention"),
+            "zeroBaseCmdBurstCount": LaunchConfiguration("zeroBaseCmdBurstCount"),
+            "zeroBaseCmdBurstRate": LaunchConfiguration("zeroBaseCmdBurstRate"),
+            "activateMpcControllerOnGoal": LaunchConfiguration("activateMpcControllerOnGoal"),
+        }.items(),
+    )
+
     visualize_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([mpc_share, "launch", "visualization", "visualize.launch.py"])
@@ -206,5 +238,6 @@ def generate_launch_description():
             ros2_control_node,
             controller_sequence,
             command_launch,
+            tt_action_launch,
         ]
     )

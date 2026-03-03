@@ -46,6 +46,10 @@ def generate_launch_description():
         DeclareLaunchArgument('robotName', default_value='mobile_manipulator'),
         DeclareLaunchArgument('tt_params', default_value=os.path.join(
             get_package_share_directory('mpc_cartesian_planner'), 'config', 'tt_params.yaml')),
+        DeclareLaunchArgument("publishZeroBaseCmdOnIntervention", default_value="true"),
+        DeclareLaunchArgument("zeroBaseCmdBurstCount", default_value="10"),
+        DeclareLaunchArgument("zeroBaseCmdBurstRate", default_value="50.0"),
+        DeclareLaunchArgument("activateMpcControllerOnGoal", default_value="false"),
     ]
 
     robot_description_content = Command(
@@ -128,13 +132,13 @@ def generate_launch_description():
         }.items(),
     )
     
-    # Trajectory tracking launcher
-    tt_dir = PathJoinSubstitution([FindPackageShare("mpc_controller"), "launch", "command"])
-    tt_launch = IncludeLaunchDescription(
+    # Trajectory tracking action + monitor launcher
+    tt_action_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([
-                tt_dir,
-                PythonExpression(["'cartesian_tt.launch.py'"]),
+                FindPackageShare("mpc_cartesian_planner"),
+                "launch",
+                "tt_action.launch.py",
             ])
         ),
         launch_arguments={
@@ -144,6 +148,11 @@ def generate_launch_description():
             "libFolder": LaunchConfiguration("libFolder"),
             "urdfFile": LaunchConfiguration("urdfFile"),
             "globalFrame": LaunchConfiguration("globalFrame"),
+            "baseCmdTopic": LaunchConfiguration("baseCmdTopic"),
+            "publishZeroBaseCmdOnIntervention": LaunchConfiguration("publishZeroBaseCmdOnIntervention"),
+            "zeroBaseCmdBurstCount": LaunchConfiguration("zeroBaseCmdBurstCount"),
+            "zeroBaseCmdBurstRate": LaunchConfiguration("zeroBaseCmdBurstRate"),
+            "activateMpcControllerOnGoal": LaunchConfiguration("activateMpcControllerOnGoal"),
         }.items(),
     )
 
@@ -164,7 +173,7 @@ def generate_launch_description():
             mpc_node,
             ros2_control_node,
             controller_sequence,
-            command_launch,
-            # tt_launch,
+            # command_launch,
+            tt_action_launch,
         ]
     )

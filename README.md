@@ -173,6 +173,23 @@ Note that `modeWeights=3/4` are only for floating-base manipulator.
 /joint_states/velocity[8]
 ```
 
+## Cartesian trajectory tracking screw motion action example:
+
+```bash
+ros2 action send_goal \
+  /mobile_manipulator/trajectory_tracking/execute_screw_move \
+  mpc_cartesian_planner/action/ExecuteScrewMove \
+  "{
+    duration: 5.0, 
+    dt: 0.02, 
+    time_scaling: 'min_jerk', 
+    screw_uhat: [0.0, 1.0, 0.0], 
+    screw_r: [-0.2, 0.0, 0.0], 
+    screw_theta: 1.57079632679, 
+    screw_in_tool_frame: true
+  }"
+```
+
 ## Contact
 
 - **Author**: Wei-Hsuan Cheng [(johnathancheng0125@gmail.com)](mailto:johnathancheng0125@gmail.com)
