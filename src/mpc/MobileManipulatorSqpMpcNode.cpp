@@ -101,6 +101,7 @@ int main(int argc, char** argv)
     auto mobileManipulatorReferenceManagerPtr =
         std::dynamic_pointer_cast<MobileManipulatorReferenceManager>(interface.getReferenceManagerPtr());
     rclcpp::Subscription<ocs2_msgs::msg::MpcTargetTrajectories>::SharedPtr baseTargetSubscriber;
+    rclcpp::Subscription<ocs2_msgs::msg::MpcTargetTrajectories>::SharedPtr jointTargetSubscriber;
     rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr envObstacleSubscriber;
     if (mobileManipulatorReferenceManagerPtr) {
         baseTargetSubscriber = node->create_subscription<ocs2_msgs::msg::MpcTargetTrajectories>(
@@ -108,6 +109,12 @@ int main(int argc, char** argv)
             [mobileManipulatorReferenceManagerPtr](const ocs2_msgs::msg::MpcTargetTrajectories& msg) {
                 auto targetTrajectories = ros_msg_conversions::readTargetTrajectoriesMsg(msg);
                 mobileManipulatorReferenceManagerPtr->setBaseTargetTrajectories(std::move(targetTrajectories));
+            });
+        jointTargetSubscriber = node->create_subscription<ocs2_msgs::msg::MpcTargetTrajectories>(
+            robotName + std::string("_joint_mpc_target"), 1,
+            [mobileManipulatorReferenceManagerPtr](const ocs2_msgs::msg::MpcTargetTrajectories& msg) {
+                auto targetTrajectories = ros_msg_conversions::readTargetTrajectoriesMsg(msg);
+                mobileManipulatorReferenceManagerPtr->setJointTargetTrajectories(std::move(targetTrajectories));
             });
         envObstacleSubscriber = node->create_subscription<visualization_msgs::msg::MarkerArray>(
             robotName + std::string("_env_obstacles"), 1,
@@ -125,6 +132,7 @@ int main(int argc, char** argv)
     mpcNode.launchNodes(node);
 
     (void)baseTargetSubscriber;
+    (void)jointTargetSubscriber;
     (void)envObstacleSubscriber;
     return 0;
 }

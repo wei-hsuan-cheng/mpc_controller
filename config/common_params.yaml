@@ -32,6 +32,16 @@ command:
       x: 0.0
       y: 0.0
       z: 0.0
+
+  joint:
+    publish_rate: 50.0
+    horizon: 2.0
+    dt: 0.02
+    relative_to_current: true
+    sinusoid_enabled: true
+    sinusoid_amplitude: 0.03
+    sinusoid_frequency: 0.10
+    sinusoid_phase_increment: 0.35
   
   trajectory:
     publish_rate: 100.0

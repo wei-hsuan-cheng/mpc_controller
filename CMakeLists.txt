@@ -92,6 +92,10 @@ add_executable(mobile_manipulator_twist_target src/command/MobileManipulatorTwis
 ament_target_dependencies(mobile_manipulator_twist_target ${OCS2_CONTROL_NODE_DEPENDENCIES})
 target_link_libraries(mobile_manipulator_twist_target yaml-cpp)
 
+add_executable(mobile_manipulator_joint_target src/command/MobileManipulatorJointTarget.cpp)
+ament_target_dependencies(mobile_manipulator_joint_target ${OCS2_CONTROL_NODE_DEPENDENCIES})
+target_link_libraries(mobile_manipulator_joint_target yaml-cpp)
+
 add_executable(mobile_manipulator_trajectory_target src/command/MobileManipulatorTrajectoryTarget.cpp)
 ament_target_dependencies(mobile_manipulator_trajectory_target ${OCS2_CONTROL_NODE_DEPENDENCIES})
 target_link_libraries(mobile_manipulator_trajectory_target yaml-cpp)
@@ -112,6 +116,7 @@ install(TARGETS
   mobile_manipulator_sqp_mpc_node
   mobile_manipulator_marker_target
   mobile_manipulator_twist_target
+  mobile_manipulator_joint_target
   mobile_manipulator_trajectory_target
   fake_base_odom_node
   DESTINATION lib/${PROJECT_NAME}
