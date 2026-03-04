@@ -309,7 +309,7 @@ referenceBlending
 
 envCollision
 {
-  activate true
+  activate false
   implementation hard // soft, hard
   mu 0.01
   delta 0.001
