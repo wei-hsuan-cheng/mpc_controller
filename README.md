@@ -156,10 +156,11 @@ referenceBlending
     [2] "2  1.0  0.0  1.0"  ; joint + EE
     [3] "3  0.0  1.0  0.0"  ; base-only
     [4] "4  1.0  1.0  0.0"  ; base + EE
+    [5] "5  0.0  1.0  1.0"  ; base + joint
   }
 }
 ```
-Note that `modeWeights=3/4` are only for floating-base manipulator.
+Note that `modeWeights=3/4/5` are only for floating-base manipulator.
 
 ## MPC rollout topic
 
