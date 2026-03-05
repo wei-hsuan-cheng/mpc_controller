@@ -24,6 +24,7 @@
 #include <ocs2_self_collision_visualization/GeometryInterfaceVisualization.h>
 
 #include "mpc_controller/visualization/EnvironmentCollisionVisualization.h"
+#include "mpc_controller/visualization/SphereSelfCollisionVisualization.h"
 
 namespace mpc_controller {
 
@@ -76,6 +77,7 @@ private:
 
   std::unique_ptr<ocs2::GeometryInterfaceVisualization> geometry_visualization_;
   std::unique_ptr<EnvironmentCollisionVisualization> env_collision_visualization_;
+  std::unique_ptr<SphereSelfCollisionVisualization> sphere_self_collision_visualization_;
 };
 
 } // namespace mpc_controller

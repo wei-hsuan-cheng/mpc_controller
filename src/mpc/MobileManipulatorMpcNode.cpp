@@ -36,9 +36,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <ocs2_ros_interfaces/synchronized_module/RosReferenceManager.h>
 #include <visualization_msgs/msg/marker_array.hpp>
 
+#include <Eigen/Geometry>
 #include <algorithm>
 #include <utility>
 
+#include <mobile_manipulator_mpc/EnvironmentCollisionGeometry.h>
 #include "rclcpp/rclcpp.hpp"
 
 using namespace ocs2;
@@ -51,21 +53,41 @@ EnvironmentObstacleArray readEnvironmentObstacles(const visualization_msgs::msg:
   obstacles.reserve(msg.markers.size());
 
   for (const auto& marker : msg.markers) {
-    if (marker.type != visualization_msgs::msg::Marker::SPHERE ||
-        marker.action != visualization_msgs::msg::Marker::ADD) {
+    if (marker.action != visualization_msgs::msg::Marker::ADD) {
       continue;
     }
 
-    const double diameter = std::max({marker.scale.x, marker.scale.y, marker.scale.z});
-    if (diameter <= 0.0) {
-      continue;
-    }
-
-    SphericalObstacle obstacle;
+    EnvironmentObstacle obstacle;
     obstacle.center.x() = marker.pose.position.x;
     obstacle.center.y() = marker.pose.position.y;
     obstacle.center.z() = marker.pose.position.z;
-    obstacle.radius = 0.5 * diameter;
+
+    if (marker.type == visualization_msgs::msg::Marker::SPHERE) {
+      const double diameter = std::max({marker.scale.x, marker.scale.y, marker.scale.z});
+      obstacle.shape = EnvironmentObstacleShape::Sphere;
+      obstacle.radius = 0.5 * diameter;
+      obstacle.orientation = matrix3_t::Identity();
+    } else if (marker.type == visualization_msgs::msg::Marker::CYLINDER) {
+      const double diameter = std::max(marker.scale.x, marker.scale.y);
+      obstacle.shape = EnvironmentObstacleShape::Column;
+      obstacle.radius = 0.5 * diameter;
+      obstacle.height = marker.scale.z;
+
+      Eigen::Quaternion<scalar_t> q(marker.pose.orientation.w, marker.pose.orientation.x, marker.pose.orientation.y,
+                                    marker.pose.orientation.z);
+      if (q.squaredNorm() < 1e-12) {
+        q = Eigen::Quaternion<scalar_t>::Identity();
+      } else {
+        q.normalize();
+      }
+      obstacle.orientation = q.toRotationMatrix();
+    } else {
+      continue;
+    }
+
+    if (!isObstacleGeometryValid(obstacle)) {
+      continue;
+    }
     obstacles.push_back(std::move(obstacle));
   }
 

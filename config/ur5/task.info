@@ -306,6 +306,7 @@ selfCollision
 { 
   ; activate self-collision constraint
   activate  true // false; true
+  geometry "fcl" // fcl (URDF collision objects), spheres (task-file sphere approximation)
   implementation hard // soft, hard
 
   ; Self Collision raw object pairs

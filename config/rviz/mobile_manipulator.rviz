@@ -443,6 +443,21 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
+      Name: Sphere Self Collision
+      Namespaces:
+        self_collision_pair_arrow: true
+        self_collision_pair_endpoints: true
+        self_collision_pair_text: true
+        self_collision_spheres: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /mobile_manipulator/sphereSelfCollisionMarkers
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
       Name: MarkerArray
       Namespaces:
         5 - 9: true

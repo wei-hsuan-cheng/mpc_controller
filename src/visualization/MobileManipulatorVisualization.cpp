@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <utility>
 
 #include <string>
@@ -68,6 +69,16 @@ Eigen::Quaterniond quatFromCoeffs(const Eigen::Vector4d& coeffs) {
   return q.normalized();
 }
 
+std::string normalizeToken(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  value.erase(std::remove_if(value.begin(), value.end(), [](unsigned char c) {
+    return std::isspace(c) || c == '_' || c == '-';
+  }), value.end());
+  return value;
+}
+
 } // namespace
 
 MobileManipulatorVisualization::MobileManipulatorVisualization(const rclcpp::Node::SharedPtr &node,
@@ -104,18 +115,47 @@ void MobileManipulatorVisualization::launchVisualizerNode(const std::string &tas
 
   bool activate_self_collision = true;
   ocs2::loadData::loadPtreeValue(pt, activate_self_collision, "selfCollision.activate", true);
+  std::string self_collision_geometry = "fcl";
+  ocs2::loadData::loadPtreeValue(pt, self_collision_geometry, "selfCollision.geometry", false);
+  const auto self_collision_geometry_mode = normalizeToken(self_collision_geometry);
 
   if (activate_self_collision) {
-    auto viz_pinocchio = createPinocchioInterface(urdf_file, model_type, remove_joint_names_);
+    const bool use_sphere_self_collision = (self_collision_geometry_mode == "sphere" ||
+                                            self_collision_geometry_mode == "spheres" ||
+                                            self_collision_geometry_mode == "sphereapprox" ||
+                                            self_collision_geometry_mode == "sphereapproximation");
+    if (!use_sphere_self_collision) {
+      auto viz_pinocchio = createPinocchioInterface(urdf_file, model_type, remove_joint_names_);
 
-    std::vector<std::pair<size_t, size_t>> collision_object_pairs;
-    std::vector<std::pair<std::string, std::string>> collision_link_pairs;
-    ocs2::loadData::loadStdVectorOfPair(task_file, "selfCollision.collisionObjectPairs", collision_object_pairs, true);
-    ocs2::loadData::loadStdVectorOfPair(task_file, "selfCollision.collisionLinkPairs", collision_link_pairs, true);
+      std::vector<std::pair<size_t, size_t>> collision_object_pairs;
+      std::vector<std::pair<std::string, std::string>> collision_link_pairs;
+      ocs2::loadData::loadStdVectorOfPair(task_file, "selfCollision.collisionObjectPairs", collision_object_pairs, false);
+      ocs2::loadData::loadStdVectorOfPair(task_file, "selfCollision.collisionLinkPairs", collision_link_pairs, false);
 
-    ocs2::PinocchioGeometryInterface geom_interface(viz_pinocchio, collision_link_pairs, collision_object_pairs);
-    geometry_visualization_ = std::make_unique<GeometryInterfaceVisualization>(
-        std::move(viz_pinocchio), std::move(geom_interface), global_frame_);
+      if (!collision_object_pairs.empty() || !collision_link_pairs.empty()) {
+        ocs2::PinocchioGeometryInterface geom_interface(viz_pinocchio, collision_link_pairs, collision_object_pairs);
+        geometry_visualization_ = std::make_unique<GeometryInterfaceVisualization>(
+            std::move(viz_pinocchio), std::move(geom_interface), global_frame_);
+      } else {
+        RCLCPP_WARN(node_->get_logger(),
+                    "selfCollision.geometry=fcl but no collisionObjectPairs/collisionLinkPairs configured; "
+                    "self-collision visualization disabled.");
+      }
+    } else {
+      const auto sphere_config =
+          ocs2::mobile_manipulator_mpc::loadEnvironmentCollisionConfig(task_file, "selfCollision",
+                                                                        pinocchio_interface_.getModel());
+      std::vector<std::pair<size_t, size_t>> sphere_pairs;
+      ocs2::loadData::loadStdVectorOfPair(task_file, "selfCollision.spherePairs", sphere_pairs, false);
+
+      sphere_self_collision_visualization_ = std::make_unique<SphereSelfCollisionVisualization>(
+          node_, pinocchio_interface_, sphere_config.robotSpheres, std::move(sphere_pairs),
+          sphere_config.minimumDistance, global_frame_);
+
+      RCLCPP_INFO(node_->get_logger(),
+                  "selfCollision.geometry uses sphere approximation; publishing /mobile_manipulator/"
+                  "sphereSelfCollisionMarkers.");
+    }
   }
 
   const auto env_collision_config =
@@ -272,6 +312,9 @@ void MobileManipulatorVisualization::update(const ocs2::vector_t &current_state,
   }
   if (env_collision_visualization_) {
     env_collision_visualization_->publish(current_state, stamp);
+  }
+  if (sphere_self_collision_visualization_) {
+    sphere_self_collision_visualization_->publish(current_state, stamp);
   }
 }
 

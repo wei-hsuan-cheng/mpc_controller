@@ -13,6 +13,7 @@
 #include <pinocchio/algorithm/frames.hpp>
 #include <pinocchio/algorithm/kinematics.hpp>
 
+#include <mobile_manipulator_mpc/EnvironmentCollisionGeometry.h>
 #include <ocs2_ros_interfaces/common/RosMsgHelpers.h>
 
 namespace mpc_controller {
@@ -70,13 +71,13 @@ EnvironmentObstacleArray EnvironmentCollisionVisualization::getActiveObstacles()
   obstacles.reserve(config_.staticObstacles.size() + (referenceManager_ ? referenceManager_->getEnvironmentObstacles().size() : 0));
 
   for (const auto& obstacle : config_.staticObstacles) {
-    if (obstacle.active && obstacle.radius > 0.0) {
+    if (ocs2::mobile_manipulator_mpc::isObstacleGeometryValid(obstacle)) {
       obstacles.push_back(obstacle);
     }
   }
   if (referenceManager_) {
     for (const auto& obstacle : referenceManager_->getEnvironmentObstacles()) {
-      if (obstacle.active && obstacle.radius > 0.0) {
+      if (ocs2::mobile_manipulator_mpc::isObstacleGeometryValid(obstacle)) {
         obstacles.push_back(obstacle);
       }
     }
@@ -136,7 +137,7 @@ void EnvironmentCollisionVisualization::publishSceneMarkers(
   }
 
   const size_t staticObstacleCount = std::count_if(config_.staticObstacles.begin(), config_.staticObstacles.end(), [](const auto& obstacle) {
-    return obstacle.active && obstacle.radius > 0.0;
+    return ocs2::mobile_manipulator_mpc::isObstacleGeometryValid(obstacle);
   });
   for (size_t i = 0; i < obstacles.size(); ++i) {
     const auto& obstacle = obstacles[i];
@@ -145,13 +146,18 @@ void EnvironmentCollisionVisualization::publishSceneMarkers(
     marker.header = ocs2::ros_msg_helpers::getHeaderMsg(globalFrame_, stamp);
     marker.ns = isStatic ? "static_obstacles" : "dynamic_obstacles";
     marker.id = markerId++;
-    marker.type = visualization_msgs::msg::Marker::SPHERE;
+    marker.type = (obstacle.shape == ocs2::mobile_manipulator_mpc::EnvironmentObstacleShape::Column)
+                      ? visualization_msgs::msg::Marker::CYLINDER
+                      : visualization_msgs::msg::Marker::SPHERE;
     marker.action = visualization_msgs::msg::Marker::ADD;
     marker.pose.position = ocs2::ros_msg_helpers::getPointMsg(obstacle.center);
-    marker.pose.orientation = ocs2::ros_msg_helpers::getOrientationMsg(Eigen::Quaterniond::Identity());
+    const Eigen::Quaterniond obstacleOrientation(obstacle.orientation.template cast<double>());
+    marker.pose.orientation = ocs2::ros_msg_helpers::getOrientationMsg(obstacleOrientation.normalized());
     marker.scale.x = 2.0 * obstacle.radius;
     marker.scale.y = 2.0 * obstacle.radius;
-    marker.scale.z = 2.0 * obstacle.radius;
+    marker.scale.z = (obstacle.shape == ocs2::mobile_manipulator_mpc::EnvironmentObstacleShape::Column)
+                         ? obstacle.height
+                         : (2.0 * obstacle.radius);
     marker.color = ocs2::ros_msg_helpers::getColor(isStatic ? kStaticObstacleColor : kDynamicObstacleColor, 0.45);
     markerArray.markers.push_back(std::move(marker));
   }
@@ -173,15 +179,16 @@ void EnvironmentCollisionVisualization::publishDistanceMarkers(
   for (const auto& robotSphere : robotSpheres) {
     for (size_t obstacleIdx = 0; obstacleIdx < obstacles.size(); ++obstacleIdx) {
       const auto& obstacle = obstacles[obstacleIdx];
-      const vector3_t separation = obstacle.center - robotSphere.center;
-      const double centerDistance = separation.norm();
-      vector3_t direction = vector3_t::UnitX();
-      if (centerDistance > kDistanceEps) {
-        direction = separation / centerDistance;
+      const auto distance = ocs2::mobile_manipulator_mpc::computeSphereDistanceToObstacle(robotSphere.center, obstacle);
+      vector3_t direction = distance.gradientWrtPoint;
+      const vector3_t towardObstacle = distance.closestPoint - robotSphere.center;
+      if (towardObstacle.norm() > kDistanceEps) {
+        direction = towardObstacle.normalized();
       }
+
       const vector3_t robotSurfacePoint = robotSphere.center + direction * robotSphere.sphere.radius;
-      const vector3_t obstacleSurfacePoint = obstacle.center - direction * obstacle.radius;
-      const double signedMargin = centerDistance - (robotSphere.sphere.radius + obstacle.radius + config_.minimumDistance);
+      const vector3_t obstacleSurfacePoint = distance.closestPoint;
+      const double signedMargin = distance.signedDistance - (robotSphere.sphere.radius + config_.minimumDistance);
       const auto color = getDistanceColor(signedMargin);
 
       visualization_msgs::msg::Marker arrow;

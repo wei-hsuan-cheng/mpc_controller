@@ -310,7 +310,7 @@ referenceBlending
 
 envCollision
 {
-  activate false
+  activate true
   implementation hard // soft, hard
   mu 0.01
   delta 0.001
@@ -336,12 +336,33 @@ envCollision
   ; Static obstacle spheres in the MPC/world frame.
   staticObstacles
   {
+    ;[0]
+    ;{
+    ;  shape "sphere"
+    ;  x 1.5
+    ;  y 0.0
+    ;  z 0.5
+    ;  radius 0.5
+    ;}
     [0]
     {
-      x 1.5
-      y 0.0
+      shape "column"   ; alias: cylinder
+      x 0.75
+      y 0.75
       z 0.5
-      radius 0.5
+      radius 0.01
+      height 1.0
+      yaw 0.0
+    }
+    [1]
+    {
+      shape "column"   ; alias: cylinder
+      x 0.75
+      y -0.75
+      z 0.5
+      radius 0.01
+      height 1.0
+      yaw 0.0
     }
   }
 }
@@ -350,26 +371,47 @@ selfCollision
 { 
   ; activate self-collision constraint
   activate  true // false; true
+  geometry "spheres" // fcl (URDF collision objects), spheres (task-file sphere approximation)
   implementation hard // soft, hard
 
   ; Self Collision raw object pairs
   collisionObjectPairs
   {
-    //[0] "5, 8"
-    [0] "5, 9"
-    //[1] "5, 10"
-    //[3] "5, 11"
-    //[4] "5, 12"
+    //[0] "5, 9"
+  }
+
+  ; Self Collision pairs
+  collisionLinkPairs
+  {
+    [0] "ur_arm_shoulder_link, ur_arm_wrist_3_link"
   }
 
   ; minimum distance allowed between the pairs
-  minimumDistance  0.1
+  minimumDistance  0.2
 
   ; relaxed log barrier mu
   mu     0.01
 
   ; relaxed log barrier delta
   delta  0.001
+
+  robotSpheres
+  {
+    [0]
+    {
+      frame "base_link"
+      radius 0.5
+    }
+    [1]
+    {
+      frame "ur_arm_wrist_2_link"
+      radius 0.2
+    }
+  }
+  spherePairs
+  {
+    [0] "0, 1"
+  }
   
   ; TODO: Replace the collision meshes of the arm with primitive shapes.
 }
