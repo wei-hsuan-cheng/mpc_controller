@@ -302,7 +302,8 @@ jointTracking
 baseTracking
 {
   activate true
-  mu  5.0
+  muPosition    5.0
+  muOrientation 2.5
 
   reference
   {
