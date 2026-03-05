@@ -302,7 +302,7 @@ jointTracking
 baseTracking
 {
   activate true
-  mu  50.0
+  mu  5.0
 
   reference
   {
