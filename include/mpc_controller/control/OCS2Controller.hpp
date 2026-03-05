@@ -173,6 +173,9 @@ private:
   // Odom state
   mutable std::mutex odom_mutex_;
   std::array<double, 3> base_pose_from_odom_{0.0, 0.0, 0.0};  // x, y, yaw
+  bool have_odom_yaw_sample_{false};
+  double last_odom_yaw_wrapped_{0.0};
+  double odom_yaw_unwrapped_{0.0};
 
   // ===== ros2_control handles =====
   std::vector<hardware_interface::LoanedStateInterface *> joint_position_states_;

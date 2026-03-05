@@ -25,6 +25,14 @@ using ocs2::vector_t;
 using ocs2::mobile_manipulator_mpc::MobileManipulatorInterface;
 using ocs2::mobile_manipulator_mpc::ManipulatorModelType;
 
+namespace {
+
+inline double normalizeAngle(double angle) {
+  return std::atan2(std::sin(angle), std::cos(angle));
+}
+
+}  // namespace
+
 // ===== Param helpers =====
 
 void OCS2Controller::declareIfUndeclaredNotSet(
@@ -325,6 +333,13 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   last_command_ = vector_t::Zero(input_dim_);
   last_base_cmd_ = vector_t::Zero(static_cast<Eigen::Index>(base_input_dim_));
   last_arm_pos_cmd_.assign(static_cast<size_t>(info.armDim), 0.0);
+  {
+    std::lock_guard<std::mutex> lock(odom_mutex_);
+    base_pose_from_odom_ = {0.0, 0.0, 0.0};
+    have_odom_yaw_sample_ = false;
+    last_odom_yaw_wrapped_ = 0.0;
+    odom_yaw_unwrapped_ = 0.0;
+  }
 
   // ---- pubs/subs: only enable what is meaningful ----
   if (model_type_ == ManipulatorModelType::WheelBasedMobileManipulator) {
@@ -348,7 +363,16 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
         const auto & q = msg->pose.pose.orientation;
         const double siny_cosp = 2.0 * (q.w * q.z + q.x * q.y);
         const double cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
-        base_pose_from_odom_[2] = std::atan2(siny_cosp, cosy_cosp);
+        const double yaw_wrapped = std::atan2(siny_cosp, cosy_cosp);
+        if (!have_odom_yaw_sample_) {
+          odom_yaw_unwrapped_ = yaw_wrapped;
+          have_odom_yaw_sample_ = true;
+        } else {
+          const double dyaw = normalizeAngle(yaw_wrapped - last_odom_yaw_wrapped_);
+          odom_yaw_unwrapped_ += dyaw;
+        }
+        last_odom_yaw_wrapped_ = yaw_wrapped;
+        base_pose_from_odom_[2] = odom_yaw_unwrapped_;
       });
   } else {
     odom_sub_.reset();
