@@ -230,7 +230,7 @@ ros2 action send_goal \
 ## Combined EE/base trajectory tracking action examples:
 
 ```bash
-# 1) Pure EE TT: unchanged
+# 1) Pure EE TT
 ros2 action send_goal \
   /mobile_manipulator/trajectory_tracking/execute_target_pose \
   mpc_cartesian_planner/action/ExecuteTargetPose \
