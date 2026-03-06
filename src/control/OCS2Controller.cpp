@@ -16,6 +16,8 @@
 
 #include <pluginlib/class_list_macros.hpp>
 
+#include <mobile_manipulator_mpc/reference/MobileManipulatorReferenceManager.h>
+
 namespace mpc_controller
 {
 
@@ -209,6 +211,8 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
   base_cmd_topic_  = getParamAsString(node, "base_cmd_topic", base_cmd_topic_);
   odom_topic_      = getParamAsString(node, "odom_topic", odom_topic_);
   joint_jog_topic_ = getParamAsString(node, "joint_jog_topic", joint_jog_topic_);
+  zmp_wrench_topic_ = getParamAsString(node, "zmpWrenchTopic", zmp_wrench_topic_);
+  zmp_wrench_frame_id_ = getParamAsString(node, "zmpWrenchFrameId", zmp_wrench_frame_id_);
 
   // --- numeric ---
   future_time_offset_       = getParamAsDouble(node, "futureTimeOffset", 0.0);
@@ -291,9 +295,10 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
 
   RCLCPP_INFO(
     node->get_logger(),
-    "[OCS2Controller] modelType=%d | stateDim=%d inputDim=%d | base_state_dim=%zu base_input_dim=%zu | arm_state_offset=%zu arm_input_offset=%zu | armCommandMode=%s",
+    "[OCS2Controller] modelType=%d | stateDim=%d inputDim=%d | base_state_dim=%zu base_input_dim=%zu | arm_state_offset=%zu arm_input_offset=%zu | armCommandMode=%s | zmpWrenchTopic=%s | zmpWrenchFrameId=%s",
     static_cast<int>(model_type_), state_dim_, input_dim_,
-    base_state_dim_, base_input_dim_, arm_state_offset_, arm_input_offset_, arm_command_mode_str_.c_str());
+    base_state_dim_, base_input_dim_, arm_state_offset_, arm_input_offset_, arm_command_mode_str_.c_str(),
+    zmp_wrench_topic_.c_str(), zmp_wrench_frame_id_.c_str());
 
   // --- visualization (optional) ---
   try {
@@ -376,6 +381,38 @@ controller_interface::CallbackReturn OCS2Controller::on_configure(const rclcpp_l
       });
   } else {
     odom_sub_.reset();
+  }
+
+  auto mobile_manipulator_ref_manager = std::dynamic_pointer_cast<
+      ocs2::mobile_manipulator_mpc::MobileManipulatorReferenceManager>(interface_->getReferenceManagerPtr());
+  if (mobile_manipulator_ref_manager) {
+    if (zmp_wrench_frame_id_.empty()) {
+      zmp_wrench_frame_id_ = info.eeFrame;
+      RCLCPP_INFO(node->get_logger(),
+                  "[OCS2Controller] zmpWrenchFrameId not set. Fallback to model eeFrame: %s",
+                  zmp_wrench_frame_id_.c_str());
+    }
+    mobile_manipulator_ref_manager->setExternalWrenchFrameId(zmp_wrench_frame_id_);
+
+    zmp_wrench_sub_ = node->create_subscription<geometry_msgs::msg::WrenchStamped>(
+      zmp_wrench_topic_, rclcpp::SystemDefaultsQoS(),
+      [this, mobile_manipulator_ref_manager](const geometry_msgs::msg::WrenchStamped::SharedPtr msg) {
+        ocs2::mobile_manipulator_mpc::MobileManipulatorReferenceManager::wrench_vector_t wrench =
+            ocs2::mobile_manipulator_mpc::MobileManipulatorReferenceManager::wrench_vector_t::Zero();
+        wrench << msg->wrench.force.x, msg->wrench.force.y, msg->wrench.force.z,
+            msg->wrench.torque.x, msg->wrench.torque.y, msg->wrench.torque.z;
+        std::string frameId = msg->header.frame_id;
+        if (frameId.empty()) {
+          frameId = zmp_wrench_frame_id_;
+        }
+        mobile_manipulator_ref_manager->setExternalWrenchFrameId(std::move(frameId));
+        mobile_manipulator_ref_manager->setExternalWrenchInFrame(std::move(wrench));
+      });
+  } else {
+    zmp_wrench_sub_.reset();
+    RCLCPP_WARN(node->get_logger(),
+                "[OCS2Controller] Reference manager is not MobileManipulatorReferenceManager. "
+                "ZMP wrench subscription is disabled.");
   }
 
   // loop reset

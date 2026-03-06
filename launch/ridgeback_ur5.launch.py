@@ -55,6 +55,10 @@ def generate_launch_description():
         DeclareLaunchArgument("controllersFile", default_value=controllers_default),
         DeclareLaunchArgument("globalFrame", default_value="odom"),
         DeclareLaunchArgument("baseCmdTopic", default_value="/cmd_vel"),
+        DeclareLaunchArgument("zmpWrenchTopic", default_value="/admittance_controller/calibrated_wrench",
+                              description="WrenchStamped topic used by ZMP stabilization."),
+        DeclareLaunchArgument("zmpWrenchFrameId", default_value="ur_arm_tool0",
+                              description="Fallback wrench frame id when WrenchStamped.header.frame_id is empty."),
         DeclareLaunchArgument("baseCmdTimeout", default_value="0.25", description="Base cmd_vel timeout [sec] for fake odom / watchdog."),
         DeclareLaunchArgument("warnOnBaseCmdTimeout", default_value="true", description="Warn once when cmd_vel times out."),
         DeclareLaunchArgument("odomTopic", default_value="/odom"),
@@ -134,6 +138,8 @@ def generate_launch_description():
                 "taskFile": LaunchConfiguration("taskFile"),
                 "urdfFile": LaunchConfiguration("urdfFile"),
                 "libFolder": LaunchConfiguration("libFolder"),
+                "zmpWrenchTopic": LaunchConfiguration("zmpWrenchTopic"),
+                "zmpWrenchFrameId": LaunchConfiguration("zmpWrenchFrameId"),
             }
         ],
     )

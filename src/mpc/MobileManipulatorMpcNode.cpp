@@ -34,6 +34,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <ocs2_ros_interfaces/common/RosMsgConversions.h>
 #include <ocs2_ros_interfaces/mpc/MPC_ROS_Interface.h>
 #include <ocs2_ros_interfaces/synchronized_module/RosReferenceManager.h>
+#include <geometry_msgs/msg/wrench_stamped.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
 #include <Eigen/Geometry>
@@ -108,9 +109,19 @@ int main(int argc, char **argv) {
   std::string taskFile = node->get_parameter("taskFile").as_string();
   std::string libFolder = node->get_parameter("libFolder").as_string();
   std::string urdfFile = node->get_parameter("urdfFile").as_string();
+  std::string zmpWrenchTopic = "/admittance_controller/calibrated_wrench";
+  std::string zmpWrenchFrameId;
+  if (node->has_parameter("zmpWrenchTopic")) {
+    zmpWrenchTopic = node->get_parameter("zmpWrenchTopic").as_string();
+  }
+  if (node->has_parameter("zmpWrenchFrameId")) {
+    zmpWrenchFrameId = node->get_parameter("zmpWrenchFrameId").as_string();
+  }
   std::cerr << "Loading task file: " << taskFile << std::endl;
   std::cerr << "Loading library folder: " << libFolder << std::endl;
   std::cerr << "Loading urdf file: " << urdfFile << std::endl;
+  std::cerr << "Loading ZMP wrench topic: " << zmpWrenchTopic << std::endl;
+  std::cerr << "Loading ZMP wrench frame id: " << zmpWrenchFrameId << std::endl;
 
   MobileManipulatorInterface interface(taskFile, libFolder, urdfFile);
 
@@ -123,7 +134,14 @@ int main(int argc, char **argv) {
   rclcpp::Subscription<ocs2_msgs::msg::MpcTargetTrajectories>::SharedPtr baseTargetSubscriber;
   rclcpp::Subscription<ocs2_msgs::msg::MpcTargetTrajectories>::SharedPtr jointTargetSubscriber;
   rclcpp::Subscription<visualization_msgs::msg::MarkerArray>::SharedPtr envObstacleSubscriber;
+  rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr zmpWrenchSubscriber;
   if (mobileManipulatorReferenceManagerPtr) {
+    if (zmpWrenchFrameId.empty()) {
+      zmpWrenchFrameId = interface.getManipulatorModelInfo().eeFrame;
+      std::cerr << "zmpWrenchFrameId not set. Fallback to model eeFrame: " << zmpWrenchFrameId << std::endl;
+    }
+    mobileManipulatorReferenceManagerPtr->setExternalWrenchFrameId(zmpWrenchFrameId);
+
     baseTargetSubscriber = node->create_subscription<ocs2_msgs::msg::MpcTargetTrajectories>(
         robotName + std::string("_base_mpc_target"), 1,
         [mobileManipulatorReferenceManagerPtr](const ocs2_msgs::msg::MpcTargetTrajectories& msg) {
@@ -142,6 +160,20 @@ int main(int argc, char **argv) {
           auto obstacles = readEnvironmentObstacles(msg);
           mobileManipulatorReferenceManagerPtr->setEnvironmentObstacles(std::move(obstacles));
         });
+    zmpWrenchSubscriber = node->create_subscription<geometry_msgs::msg::WrenchStamped>(
+        zmpWrenchTopic, 10,
+        [mobileManipulatorReferenceManagerPtr, zmpWrenchFrameId](const geometry_msgs::msg::WrenchStamped& msg) {
+          MobileManipulatorReferenceManager::wrench_vector_t wrench =
+              MobileManipulatorReferenceManager::wrench_vector_t::Zero();
+          wrench << msg.wrench.force.x, msg.wrench.force.y, msg.wrench.force.z,
+              msg.wrench.torque.x, msg.wrench.torque.y, msg.wrench.torque.z;
+          std::string frameId = msg.header.frame_id;
+          if (frameId.empty()) {
+            frameId = zmpWrenchFrameId;
+          }
+          mobileManipulatorReferenceManagerPtr->setExternalWrenchFrameId(std::move(frameId));
+          mobileManipulatorReferenceManagerPtr->setExternalWrenchInFrame(std::move(wrench));
+        });
   }
 
   GaussNewtonDDP_MPC mpc(interface.mpcSettings(), interface.ddpSettings(), interface.getRollout(),
@@ -154,5 +186,6 @@ int main(int argc, char **argv) {
   (void)baseTargetSubscriber;
   (void)jointTargetSubscriber;
   (void)envObstacleSubscriber;
+  (void)zmpWrenchSubscriber;
   return 0;
 }

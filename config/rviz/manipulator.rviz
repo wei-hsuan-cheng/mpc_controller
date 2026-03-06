@@ -274,6 +274,18 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
+      Name: CoM/ZMP Stability
+      Namespaces:
+        stability_markers: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /mobile_manipulator/comZmpMarkers
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
       Name: Environment Scene
       Namespaces:
         dynamic_obstacles: true

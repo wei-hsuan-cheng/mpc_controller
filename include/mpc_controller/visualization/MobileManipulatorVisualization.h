@@ -19,6 +19,7 @@
 #include <ocs2_core/reference/TargetTrajectories.h>
 #include <ocs2_mpc/CommandData.h>
 #include <mobile_manipulator_mpc/MobileManipulatorInterface.h>
+#include <mobile_manipulator_mpc/kinematics/ZmpKinematics.h>
 #include <mobile_manipulator_mpc/reference/MobileManipulatorReferenceManager.h>
 #include <ocs2_oc/oc_data/PrimalSolution.h>
 #include <ocs2_self_collision_visualization/GeometryInterfaceVisualization.h>
@@ -44,6 +45,9 @@ private:
   void launchVisualizerNode(const std::string &task_file, const std::string &urdf_file);
   void publishTargetTrajectories(const rclcpp::Time &time_stamp, const ocs2::TargetTrajectories &target);
   void publishOptimizedTrajectory(const rclcpp::Time &time_stamp, const ocs2::PrimalSolution &policy);
+  void publishComZmpMarkers(const rclcpp::Time &time_stamp,
+                            const ocs2::vector_t &state,
+                            const ocs2::TargetTrajectories &target);
   void publishBaseTransform(const rclcpp::Time &time_stamp, const ocs2::vector_t &state);
 
   template <typename It>
@@ -69,11 +73,17 @@ private:
   bool dual_arm_mode_{false};
 
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr optimized_state_markers_pub_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr com_zmp_markers_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr optimized_pose_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr target_pose_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr target_pose_right_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr com_pose_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr zmp_pose_pub_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   std::string global_frame_;
+  bool zmp_visualization_enabled_{false};
+  double com_zmp_marker_scale_{0.06};
+  std::unique_ptr<ocs2::mobile_manipulator_mpc::ZmpKinematics> zmp_kinematics_;
 
   std::unique_ptr<ocs2::GeometryInterfaceVisualization> geometry_visualization_;
   std::unique_ptr<EnvironmentCollisionVisualization> env_collision_visualization_;

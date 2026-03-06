@@ -62,3 +62,5 @@ mpc_controller:
     # Base IO (mobile manipulator)
     base_cmd_topic: "$(var baseCmdTopic)"
     odom_topic: "$(var odomTopic)"
+    zmpWrenchTopic: "$(var zmpWrenchTopic)"
+    zmpWrenchFrameId: "$(var zmpWrenchFrameId)"

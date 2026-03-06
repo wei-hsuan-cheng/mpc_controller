@@ -395,6 +395,26 @@ referenceBlending
   }
 }
 
+zmpStability
+{
+  activate false
+  implementation soft // soft, hard
+  supportCircleRadius 0.45
+  mu 5e-3
+  delta 1e-4
+  finiteDifferenceEpsilon 1e-6
+
+  ; External interaction wrench is initialized to zero in code and updated online from
+  ; launch args `zmpWrenchTopic` (default: /admittance_controller/calibrated_wrench)
+  ; and `zmpWrenchFrameId` (default: l_gripper_tool_frame).
+
+  visualization
+  {
+    activate false
+    markerScale 0.06
+  }
+}
+
 envCollision
 {
   activate true

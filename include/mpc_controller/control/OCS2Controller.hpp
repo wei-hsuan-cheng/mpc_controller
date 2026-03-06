@@ -17,6 +17,7 @@
 
 #include <control_msgs/msg/joint_jog.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/wrench_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 
 #include <ocs2_core/Types.h>
@@ -133,6 +134,8 @@ private:
   std::string base_cmd_topic_{"/cmd_vel"};
   std::string odom_topic_{"/odom"};
   std::string joint_jog_topic_{"/servo_node/delta_joint_cmds"};
+  std::string zmp_wrench_topic_{"/admittance_controller/calibrated_wrench"};
+  std::string zmp_wrench_frame_id_;
 
   // Dummy-like loop settings
   std::string loop_mode_str_{"auto"};
@@ -169,6 +172,7 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr base_cmd_pub_;
   rclcpp::Publisher<control_msgs::msg::JointJog>::SharedPtr joint_jog_pub_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::WrenchStamped>::SharedPtr zmp_wrench_sub_;
 
   // Odom state
   mutable std::mutex odom_mutex_;

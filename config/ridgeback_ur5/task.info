@@ -308,6 +308,26 @@ referenceBlending
   }
 }
 
+zmpStability
+{
+  activate false
+  implementation soft // soft, hard
+  supportCircleRadius 0.35
+  mu 5e-3
+  delta 1e-4
+  finiteDifferenceEpsilon 1e-6
+
+  ; External interaction wrench is initialized to zero in code and updated online from
+  ; launch args `zmpWrenchTopic` (default: /admittance_controller/calibrated_wrench)
+  ; and `zmpWrenchFrameId` (default: ur_arm_tool0).
+
+  visualization
+  {
+    activate true
+    markerScale 0.06
+  }
+}
+
 envCollision
 {
   activate true
@@ -370,7 +390,7 @@ envCollision
 selfCollision
 { 
   ; activate self-collision constraint
-  activate  true // false; true
+  activate  false // false; true
   geometry "spheres" // fcl (URDF collision objects), spheres (task-file sphere approximation)
   implementation hard // soft, hard
 

@@ -24,6 +24,7 @@
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <pinocchio/algorithm/frames.hpp>
 #include <pinocchio/algorithm/kinematics.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 namespace mpc_controller {
 
@@ -33,6 +34,7 @@ using ocs2::PrimalSolution;
 using ocs2::TargetTrajectories;
 using ocs2::mobile_manipulator_mpc::ManipulatorModelInfo;
 using ocs2::mobile_manipulator_mpc::MobileManipulatorInterface;
+using ocs2::mobile_manipulator_mpc::ZmpKinematics;
 using ocs2::mobile_manipulator_mpc::createPinocchioInterface;
 using ocs2::mobile_manipulator_mpc::getArmJointAngles;
 using ocs2::mobile_manipulator_mpc::getBaseOrientation;
@@ -43,6 +45,32 @@ constexpr double kTrajectoryLineWidth = 0.005;
 constexpr std::array<double, 3> kBaseTrajectoryColor{0.6350, 0.0780, 0.1840};
 constexpr std::array<double, 3> kEeTrajectoryColorLeft{0.0, 0.4470, 0.7410};
 constexpr std::array<double, 3> kEeTrajectoryColorRight{0.4940, 0.1840, 0.5560};
+constexpr std::array<float, 4> kComSphereColor{0.0f, 0.0f, 1.0f, 1.0f};      // blue
+constexpr std::array<float, 4> kZmpSphereColor{0.5f, 0.0f, 0.5f, 1.0f};      // purple
+
+visualization_msgs::msg::Marker makeSphereMarker(const std::string& frame, const rclcpp::Time& stamp,
+                                                 int id, const std::string& ns,
+                                                 const Eigen::Vector3d& position,
+                                                 const std::array<float, 4>& color,
+                                                 double scale)
+{
+  visualization_msgs::msg::Marker marker;
+  marker.header = ocs2::ros_msg_helpers::getHeaderMsg(frame, stamp);
+  marker.ns = ns;
+  marker.id = id;
+  marker.type = visualization_msgs::msg::Marker::SPHERE;
+  marker.action = visualization_msgs::msg::Marker::ADD;
+  marker.scale.x = scale;
+  marker.scale.y = scale;
+  marker.scale.z = scale;
+  marker.color.r = color[0];
+  marker.color.g = color[1];
+  marker.color.b = color[2];
+  marker.color.a = color[3];
+  marker.pose.orientation.w = 1.0;
+  marker.pose.position = ocs2::ros_msg_helpers::getPointMsg(position);
+  return marker;
+}
 
 bool readDualArmModeFromTaskFile(const boost::property_tree::ptree& pt) {
   bool dualArmMode = false;
@@ -101,6 +129,8 @@ void MobileManipulatorVisualization::launchVisualizerNode(const std::string &tas
       node_->create_publisher<visualization_msgs::msg::MarkerArray>("/mobile_manipulator/optimizedStateTrajectory", 1);
   optimized_pose_pub_ = node_->create_publisher<geometry_msgs::msg::PoseArray>("/mobile_manipulator/optimizedPoseTrajectory", 1);
   target_pose_pub_ = node_->create_publisher<geometry_msgs::msg::PoseStamped>("/mobile_manipulator/targetPose", 1);
+  com_pose_pub_ = node_->create_publisher<geometry_msgs::msg::PoseStamped>("/mobile_manipulator/com", 1);
+  zmp_pose_pub_ = node_->create_publisher<geometry_msgs::msg::PoseStamped>("/mobile_manipulator/zmp", 1);
 
   boost::property_tree::ptree pt;
   boost::property_tree::read_info(task_file, pt);
@@ -163,6 +193,26 @@ void MobileManipulatorVisualization::launchVisualizerNode(const std::string &tas
   if (env_collision_config.activate) {
     env_collision_visualization_ = std::make_unique<EnvironmentCollisionVisualization>(
         node_, pinocchio_interface_, reference_manager_, env_collision_config, global_frame_);
+  }
+
+  bool activate_zmp_constraint = false;
+  ocs2::loadData::loadPtreeValue(pt, activate_zmp_constraint, "zmpStability.activate", false);
+  bool activate_zmp_visualization = activate_zmp_constraint;
+  ocs2::loadData::loadPtreeValue(pt, activate_zmp_visualization, "zmpStability.visualization.activate", false);
+  ocs2::loadData::loadPtreeValue(pt, com_zmp_marker_scale_, "zmpStability.visualization.markerScale", false);
+
+  if (activate_zmp_visualization) {
+    try {
+      zmp_kinematics_ = std::make_unique<ZmpKinematics>(pinocchio_interface_, model_info_, model_info_.eeFrame);
+      com_zmp_markers_pub_ =
+          node_->create_publisher<visualization_msgs::msg::MarkerArray>("/mobile_manipulator/comZmpMarkers", 1);
+      zmp_visualization_enabled_ = true;
+      RCLCPP_INFO(node_->get_logger(),
+                  "ZMP visualization enabled: publishing /mobile_manipulator/comZmpMarkers");
+    } catch (const std::exception& e) {
+      zmp_visualization_enabled_ = false;
+      RCLCPP_WARN(node_->get_logger(), "Failed to initialize ZMP visualization: %s", e.what());
+    }
   }
 }
 
@@ -299,6 +349,83 @@ void MobileManipulatorVisualization::publishOptimizedTrajectory(const rclcpp::Ti
   }
 }
 
+void MobileManipulatorVisualization::publishComZmpMarkers(const rclcpp::Time &time_stamp,
+                                                          const ocs2::vector_t &state,
+                                                          const TargetTrajectories &target) {
+  if (!zmp_visualization_enabled_ || !zmp_kinematics_ || !com_zmp_markers_pub_) {
+    return;
+  }
+
+  if (state.size() != static_cast<long>(model_info_.stateDim)) {
+    RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
+                         "Skipping COM/ZMP marker publish due to unexpected state dimension.");
+    return;
+  }
+
+  try {
+    ZmpKinematics::vector7_t ee_pose_reference = zmp_kinematics_->getCurrentEndEffectorPoseWorld(state);
+    if (!target.stateTrajectory.empty() && target.stateTrajectory.back().size() >= 7) {
+      ee_pose_reference = target.stateTrajectory.back().head<7>();
+      Eigen::Quaterniond q;
+      q.coeffs() = ee_pose_reference.head<4>().template cast<double>();
+      if (q.squaredNorm() < 1e-12) {
+        q.setIdentity();
+      } else {
+        q.normalize();
+      }
+      ee_pose_reference.head<4>() = q.coeffs();
+    }
+
+    Eigen::Matrix<ocs2::scalar_t, 6, 1> wrench_ee = Eigen::Matrix<ocs2::scalar_t, 6, 1>::Zero();
+    std::string wrench_frame_id = model_info_.eeFrame;
+    if (reference_manager_) {
+      wrench_ee = reference_manager_->getExternalWrenchInFrame();
+      const auto& frame_id = reference_manager_->getExternalWrenchFrameId();
+      if (!frame_id.empty()) {
+        wrench_frame_id = frame_id;
+      }
+    }
+
+    const auto com_base = zmp_kinematics_->getCOMBaseFrame(state);
+    const auto zmp_base = zmp_kinematics_->getZMPBaseFrame(state, ee_pose_reference, wrench_ee, wrench_frame_id);
+
+    const Eigen::Vector3d base_position = getBasePosition(state, model_info_).template cast<double>();
+    const auto base_rotation = getBaseOrientation(state, model_info_).toRotationMatrix().template cast<double>();
+
+    const Eigen::Vector3d com_world = base_position + base_rotation * com_base.template cast<double>();
+    const Eigen::Vector3d zmp_world = base_position + base_rotation * zmp_base.template cast<double>();
+
+    if (com_pose_pub_) {
+      geometry_msgs::msg::PoseStamped com_pose;
+      com_pose.header = ocs2::ros_msg_helpers::getHeaderMsg(model_info_.baseFrame, time_stamp);
+      com_pose.pose.position = ocs2::ros_msg_helpers::getPointMsg(com_base.template cast<double>());
+      com_pose.pose.orientation.w = 1.0;
+      com_pose_pub_->publish(com_pose);
+    }
+    if (zmp_pose_pub_) {
+      geometry_msgs::msg::PoseStamped zmp_pose;
+      zmp_pose.header = ocs2::ros_msg_helpers::getHeaderMsg(model_info_.baseFrame, time_stamp);
+      zmp_pose.pose.position = ocs2::ros_msg_helpers::getPointMsg(zmp_base.template cast<double>());
+      zmp_pose.pose.orientation.w = 1.0;
+      zmp_pose_pub_->publish(zmp_pose);
+    }
+
+    visualization_msgs::msg::MarkerArray markers;
+    markers.markers.reserve(2);
+    markers.markers.emplace_back(
+        makeSphereMarker(global_frame_, time_stamp, 0, "stability_markers", com_world, kComSphereColor, com_zmp_marker_scale_));
+    markers.markers.back().text = "COM";
+    markers.markers.emplace_back(
+        makeSphereMarker(global_frame_, time_stamp, 1, "stability_markers", zmp_world, kZmpSphereColor, com_zmp_marker_scale_));
+    markers.markers.back().text = "ZMP";
+
+    com_zmp_markers_pub_->publish(markers);
+  } catch (const std::exception& e) {
+    RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,
+                         "Failed to publish COM/ZMP markers: %s", e.what());
+  }
+}
+
 void MobileManipulatorVisualization::update(const ocs2::vector_t &current_state,
                                             const PrimalSolution &policy,
                                             const CommandData &command) {
@@ -306,6 +433,7 @@ void MobileManipulatorVisualization::update(const ocs2::vector_t &current_state,
 
   publishTargetTrajectories(stamp, command.mpcTargetTrajectories_);
   publishOptimizedTrajectory(stamp, policy);
+  publishComZmpMarkers(stamp, current_state, command.mpcTargetTrajectories_);
 
   if (geometry_visualization_) {
     geometry_visualization_->publishDistances(current_state);

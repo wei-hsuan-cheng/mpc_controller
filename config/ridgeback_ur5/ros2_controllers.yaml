@@ -51,3 +51,5 @@ mpc_controller:
     # Base IO (no use in arm-only mode, but required for mobile manipulator)
     base_cmd_topic: "$(var baseCmdTopic)"
     odom_topic: "$(var odomTopic)"
+    zmpWrenchTopic: "$(var zmpWrenchTopic)"
+    zmpWrenchFrameId: "$(var zmpWrenchFrameId)"
