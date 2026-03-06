@@ -324,7 +324,7 @@ envCollision
     [0]
     {
       frame "base_link"
-      radius 0.5
+      radius 0.55
     }
     [1]
     {
@@ -387,7 +387,7 @@ selfCollision
   }
 
   ; minimum distance allowed between the pairs
-  minimumDistance  0.2
+  minimumDistance  0.05
 
   ; relaxed log barrier mu
   mu     0.01
@@ -400,12 +400,12 @@ selfCollision
     [0]
     {
       frame "base_link"
-      radius 0.5
+      radius 0.55
     }
     [1]
     {
       frame "ur_arm_wrist_2_link"
-      radius 0.2
+      radius 0.175
     }
   }
   spherePairs
